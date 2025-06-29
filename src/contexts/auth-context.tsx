@@ -1,9 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 import { apiClient } from '@/lib/api/client';
 import type { User, LoginCredentials, RegisterData, AuthContextType } from '@/types';
-import { toast } from 'react-hot-toast';
+import { toast } from '@/hooks/use-toast';
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -24,85 +26,184 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   const isAuthenticated = !!user && !!token;
 
-  // Initialize auth state from localStorage
+  // Initialize auth state from Supabase session
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const storedToken = localStorage.getItem('access_token');
-        if (storedToken) {
-          apiClient.setToken(storedToken);
-          setToken(storedToken);
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.access_token) {
+          setToken(session.access_token);
           
-          // Validate token and get user data
+          // Validate token and get user data from backend
           const userData = await apiClient.validateToken();
           setUser(userData);
+          
+          // Store tenant ID if available
+          if (userData.tenant_id) {
+            localStorage.setItem('tenant_id', userData.tenant_id);
+          }
         }
       } catch (error) {
-        // Token is invalid, clear it
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        apiClient.clearToken();
-        console.error('Token validation failed:', error);
+        console.error('Auth initialization failed:', error);
+        await supabase.auth.signOut();
       } finally {
         setIsLoading(false);
       }
     };
 
     initializeAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          try {
+            const userData = await apiClient.validateToken();
+            setUser(userData);
+            setToken(session.access_token);
+          } catch (error) {
+            console.error('Error validating session:', error);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('tenant_id');
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<User> => {
     try {
+      setIsLoading(true);
+      
+      // Login through backend API
       const response = await apiClient.login(credentials);
+      
+      // Set Supabase session
+      const { error } = await supabase.auth.setSession({
+        access_token: response.token,
+        refresh_token: response.refresh_token,
+      });
+      
+      if (error) throw error;
       
       setUser(response.user);
       setToken(response.token);
       
-      toast.success(`Welcome back, ${response.user.first_name}!`);
+      // Store tenant ID
+      if (response.user.tenant_id) {
+        localStorage.setItem('tenant_id', response.user.tenant_id);
+      }
+      
+      toast({
+        title: 'Welcome back!',
+        description: `Logged in as ${response.user.email}`,
+      });
+      
+      router.push('/dashboard');
       return response.user;
     } catch (error) {
       console.error('Login failed:', error);
+      toast({
+        title: 'Login failed',
+        description: error instanceof Error ? error.message : 'Invalid credentials',
+        variant: 'destructive',
+      });
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const register = async (data: RegisterData): Promise<User> => {
     try {
+      setIsLoading(true);
+      
+      // Register through backend API
       const response = await apiClient.register(data);
+      
+      // Set Supabase session
+      const { error } = await supabase.auth.setSession({
+        access_token: response.token,
+        refresh_token: response.refresh_token,
+      });
+      
+      if (error) throw error;
       
       setUser(response.user);
       setToken(response.token);
       
-      toast.success(`Welcome to Archivus, ${response.user.first_name}!`);
+      // Store tenant ID
+      if (response.user.tenant_id) {
+        localStorage.setItem('tenant_id', response.user.tenant_id);
+      }
+      
+      toast({
+        title: 'Account created!',
+        description: 'Welcome to Archivus.',
+      });
+      
+      router.push('/dashboard');
       return response.user;
     } catch (error) {
       console.error('Registration failed:', error);
+      toast({
+        title: 'Registration failed',
+        description: error instanceof Error ? error.message : 'Failed to create account',
+        variant: 'destructive',
+      });
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = async (): Promise<void> => {
     try {
+      setIsLoading(true);
+      
+      // Logout from backend
       await apiClient.logout();
-      toast.success('Logged out successfully');
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Continue with local logout even if API call fails
-    } finally {
+      
+      // Logout from Supabase
+      await supabase.auth.signOut();
+      
       setUser(null);
       setToken(null);
+      localStorage.removeItem('tenant_id');
+      
+      router.push('/auth/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast({
+        title: 'Logout error',
+        description: 'There was a problem logging out.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-      const refreshTokenValue = localStorage.getItem('refresh_token');
-      if (!refreshTokenValue) return false;
-
-      // This would be handled by the API client internally
+      const { data: { session }, error } = await supabase.auth.refreshSession();
+      
+      if (error || !session) {
+        throw new Error('Failed to refresh session');
+      }
+      
+      setToken(session.access_token);
       return true;
     } catch (error) {
       console.error('Token refresh failed:', error);

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { toast } from 'react-hot-toast';
+import { getSession } from '@/lib/supabase/client';
+import { toast } from '@/hooks/use-toast';
 import type {
   LoginCredentials,
   LoginResponse,
@@ -42,10 +43,19 @@ class ArchivusAPIClient {
   private setupInterceptors() {
     // Request interceptor for auth
     this.client.interceptors.request.use(
-      (config) => {
-        if (this.token) {
-          config.headers.Authorization = `Bearer ${this.token}`;
+      async (config) => {
+        // Get session from Supabase
+        const session = await getSession();
+        if (session?.access_token) {
+          config.headers.Authorization = `Bearer ${session.access_token}`;
         }
+        
+        // Add tenant header if available
+        const tenantId = localStorage.getItem('tenant_id');
+        if (tenantId) {
+          config.headers['X-Tenant-ID'] = tenantId;
+        }
+        
         return config;
       },
       (error) => Promise.reject(error)
@@ -79,12 +89,20 @@ class ArchivusAPIClient {
     // Handle rate limiting
     if (error.response?.status === 429) {
       const retryAfter = error.response.headers['retry-after'] || '60';
-      toast.error(`Rate limit exceeded. Please wait ${retryAfter} seconds.`);
+      toast({
+        title: 'Rate limit exceeded',
+        description: `Please wait ${retryAfter} seconds.`,
+        variant: 'destructive',
+      });
     }
 
     // Handle other errors
     if (error.response?.data?.message) {
-      toast.error(error.response.data.message);
+      toast({
+        title: 'Error',
+        description: error.response.data.message,
+        variant: 'destructive',
+      });
     }
 
     return Promise.reject(error);
