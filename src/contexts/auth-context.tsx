@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
 import { apiClient } from '@/lib/api/client';
 import type { User, LoginCredentials, RegisterData, AuthContextType } from '@/types';
 import { toast } from '@/hooks/use-toast';
@@ -16,6 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => { throw new Error('Not implemented'); },
   register: async () => { throw new Error('Not implemented'); },
   refreshToken: async () => false,
+  setAuth: async () => {},
 });
 
 interface AuthProviderProps {
@@ -30,14 +30,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const isAuthenticated = !!user && !!token;
 
-  // Initialize auth state from Supabase session
+  // Initialize auth state from stored tokens
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const storedToken = localStorage.getItem('access_token');
         
-        if (session?.access_token) {
-          setToken(session.access_token);
+        if (storedToken) {
+          apiClient.setToken(storedToken);
+          setToken(storedToken);
           
           // Validate token and get user data from backend
           const userData = await apiClient.validateToken();
@@ -50,36 +51,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (error) {
         console.error('Auth initialization failed:', error);
-        await supabase.auth.signOut();
+        // Clear invalid tokens
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('tenant_id');
+        apiClient.clearToken();
       } finally {
         setIsLoading(false);
       }
     };
 
     initializeAuth();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          try {
-            const userData = await apiClient.validateToken();
-            setUser(userData);
-            setToken(session.access_token);
-          } catch (error) {
-            console.error('Error validating session:', error);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setToken(null);
-          localStorage.removeItem('tenant_id');
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<User> => {
@@ -88,14 +70,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Login through backend API
       const response = await apiClient.login(credentials);
-      
-      // Set Supabase session
-      const { error } = await supabase.auth.setSession({
-        access_token: response.token,
-        refresh_token: response.refresh_token,
-      });
-      
-      if (error) throw error;
       
       setUser(response.user);
       setToken(response.token);
@@ -106,17 +80,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
       toast({
-        title: 'Welcome back!',
-        description: `Logged in as ${response.user.email}`,
+        title: 'Success',
+        description: 'Successfully logged in!',
       });
       
-      router.push('/dashboard');
       return response.user;
-    } catch (error) {
-      console.error('Login failed:', error);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Login failed';
       toast({
         title: 'Login failed',
-        description: error instanceof Error ? error.message : 'Invalid credentials',
+        description: message,
         variant: 'destructive',
       });
       throw error;
@@ -129,37 +102,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setIsLoading(true);
       
-      // Register through backend API
       const response = await apiClient.register(data);
-      
-      // Set Supabase session
-      const { error } = await supabase.auth.setSession({
-        access_token: response.token,
-        refresh_token: response.refresh_token,
-      });
-      
-      if (error) throw error;
       
       setUser(response.user);
       setToken(response.token);
       
-      // Store tenant ID
+      // Store tokens
+      localStorage.setItem('access_token', response.token);
+      localStorage.setItem('refresh_token', response.refresh_token);
+      
       if (response.user.tenant_id) {
         localStorage.setItem('tenant_id', response.user.tenant_id);
       }
       
+      apiClient.setToken(response.token);
+      
       toast({
-        title: 'Account created!',
-        description: 'Welcome to Archivus.',
+        title: 'Success',
+        description: 'Account created successfully!',
       });
       
-      router.push('/dashboard');
       return response.user;
-    } catch (error) {
-      console.error('Registration failed:', error);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Registration failed';
       toast({
         title: 'Registration failed',
-        description: error instanceof Error ? error.message : 'Failed to create account',
+        description: message,
         variant: 'destructive',
       });
       throw error;
@@ -168,47 +136,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const logout = async (): Promise<void> => {
+  const logout = async () => {
     try {
-      setIsLoading(true);
-      
-      // Logout from backend
       await apiClient.logout();
-      
-      // Logout from Supabase
-      await supabase.auth.signOut();
-      
-      setUser(null);
-      setToken(null);
-      localStorage.removeItem('tenant_id');
-      
-      router.push('/auth/login');
     } catch (error) {
       console.error('Logout error:', error);
-      toast({
-        title: 'Logout error',
-        description: 'There was a problem logging out.',
-        variant: 'destructive',
-      });
     } finally {
-      setIsLoading(false);
+      // Clear local state and storage
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('tenant_id');
+      apiClient.clearToken();
+      
+      router.push('/auth/login');
     }
   };
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-      const { data: { session }, error } = await supabase.auth.refreshSession();
-      
-      if (error || !session) {
-        throw new Error('Failed to refresh session');
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) return false;
+
+      const response = await apiClient.post<any>('/api/v1/auth/refresh', {
+        refresh_token: refreshToken,
+      });
+
+      if (response.token) {
+        setToken(response.token);
+        localStorage.setItem('access_token', response.token);
+        localStorage.setItem('refresh_token', response.refresh_token);
+        apiClient.setToken(response.token);
+        return true;
       }
       
-      setToken(session.access_token);
-      return true;
+      return false;
     } catch (error) {
       console.error('Token refresh failed:', error);
       return false;
     }
+  };
+
+  const setAuth = async (userData: User, accessToken: string) => {
+    setUser(userData);
+    setToken(accessToken);
+    apiClient.setToken(accessToken);
   };
 
   const value: AuthContextType = {
@@ -220,6 +193,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     register,
     refreshToken,
+    setAuth,
   };
 
   return (
@@ -235,4 +209,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+}

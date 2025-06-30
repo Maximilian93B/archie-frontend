@@ -1,5 +1,4 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { getSession } from '@/lib/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import type {
   LoginCredentials,
@@ -30,7 +29,7 @@ class ArchivusAPIClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_ARCHIVUS_API || 'http://localhost:8080',
+      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -43,15 +42,15 @@ class ArchivusAPIClient {
   private setupInterceptors() {
     // Request interceptor for auth
     this.client.interceptors.request.use(
-      async (config) => {
-        // Get session from Supabase
-        const session = await getSession();
-        if (session?.access_token) {
-          config.headers.Authorization = `Bearer ${session.access_token}`;
+      (config) => {
+        // Get token from storage or instance
+        const token = this.token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
         
         // Add tenant header if available
-        const tenantId = localStorage.getItem('tenant_id');
+        const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null;
         if (tenantId) {
           config.headers['X-Tenant-ID'] = tenantId;
         }
@@ -122,7 +121,7 @@ class ArchivusAPIClient {
     return response.data;
   }
 
-  private async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.post<T>(url, data, config);
     return response.data;
   }
@@ -199,6 +198,7 @@ class ArchivusAPIClient {
       return false;
     }
   }
+
 
   // ================================
   // 📄 Document Methods

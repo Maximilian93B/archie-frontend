@@ -47,8 +47,10 @@ export default function LoginPage() {
   }
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
-    // OAuth login will be implemented with Supabase
-    console.log(`Login with ${provider}`)
+    // Redirect to backend OAuth endpoint
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+    const redirectUrl = `${apiUrl}/api/v1/auth/oauth/${provider}`
+    window.location.href = redirectUrl
   }
 
   return (
@@ -174,7 +176,7 @@ export default function LoginPage() {
           </div>
         </CardContent>
         <CardFooter className="text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/auth/register" className="text-blue-600 hover:underline ml-1">
             Sign up
           </Link>

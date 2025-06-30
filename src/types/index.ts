@@ -48,6 +48,7 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   register: (data: RegisterData) => Promise<User>;
   refreshToken: () => Promise<boolean>;
+  setAuth: (user: User, token: string) => Promise<void>;
 }
 
 // ================================
@@ -55,12 +56,13 @@ export interface AuthContextType {
 // ================================
 
 export type DocumentType = 
-  | 'contract'
-  | 'invoice' 
-  | 'report'
-  | 'email'
-  | 'legal'
-  | 'financial'
+  | 'pdf'
+  | 'doc'
+  | 'docx'
+  | 'txt'
+  | 'image'
+  | 'spreadsheet'
+  | 'presentation'
   | 'other';
 
 export type ProcessingStatus = 
@@ -129,7 +131,7 @@ export interface DocumentListParams {
   page_size?: number;
   sort_by?: string;
   sort_desc?: boolean;
-  document_type?: DocumentType;
+  document_types?: DocumentType[];
   search?: string;
   folder_id?: string;
   tags?: string[];
