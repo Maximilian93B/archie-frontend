@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Mail, Lock } from 'lucide-react'
+import { Loader2, Mail, Lock, Building2 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator'
 
 const loginSchema = z.object({
+  subdomain: z.string().min(1, 'Organization subdomain is required'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 })
@@ -24,15 +25,28 @@ type LoginFormData = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login } = useAuth()
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      subdomain: searchParams.get('subdomain') || '',
+    },
   })
+
+  // Set subdomain from URL if available
+  useEffect(() => {
+    const subdomain = searchParams.get('subdomain')
+    if (subdomain) {
+      setValue('subdomain', subdomain)
+    }
+  }, [searchParams, setValue])
 
   const onSubmit = async (data: LoginFormData) => {
     try {
@@ -66,6 +80,23 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="subdomain">Workspace</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="subdomain"
+                  placeholder="your-workspace"
+                  className="pl-10"
+                  disabled={isLoading}
+                  {...register('subdomain')}
+                />
+              </div>
+              <p className="text-xs text-gray-500">Enter your workspace subdomain (e.g., john-doe-a1b2c)</p>
+              {errors.subdomain && (
+                <p className="text-sm text-red-600">{errors.subdomain.message}</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -106,6 +137,12 @@ export default function LoginPage() {
                 className="text-sm text-blue-600 hover:underline"
               >
                 Forgot password?
+              </Link>
+              <Link
+                href="/auth/forgot-subdomain"
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Forgot subdomain?
               </Link>
             </div>
             <Button

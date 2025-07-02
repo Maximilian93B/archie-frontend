@@ -4,7 +4,6 @@ import { HoveredLink, Menu, MenuItem, ProductItem } from "@/components/ui/navbar
 import { cn } from "@/lib/utils";
 
 
-
 export function Navbar() {
   const [active, setActive] = useState<string | null>(null);
   return (

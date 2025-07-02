@@ -4,7 +4,7 @@ import type { Document } from '@/types'
 
 interface DocumentState {
   // Selected documents for bulk operations
-  selectedDocuments: Set<string>
+  selectedDocuments: string[]
   
   // Current document being viewed
   currentDocument: Document | null
@@ -32,6 +32,7 @@ interface DocumentState {
   setCurrentDocument: (document: Document | null) => void
   setViewMode: (mode: 'list' | 'grid') => void
   setSortBy: (field: 'created_at' | 'title' | 'file_size' | 'updated_at') => void
+  setSortOrder: (order: 'asc' | 'desc') => void
   toggleSortOrder: () => void
   setFilters: (filters: DocumentState['filters']) => void
   clearFilters: () => void
@@ -42,7 +43,7 @@ export const useDocumentStore = create<DocumentState>()(
     persist(
       (set) => ({
         // Initial state
-        selectedDocuments: new Set(),
+        selectedDocuments: [],
         currentDocument: null,
         viewMode: 'list',
         sortBy: 'created_at',
@@ -52,20 +53,19 @@ export const useDocumentStore = create<DocumentState>()(
         // Actions
         toggleDocumentSelection: (documentId) =>
           set((state) => {
-            const newSelection = new Set(state.selectedDocuments)
-            if (newSelection.has(documentId)) {
-              newSelection.delete(documentId)
+            const isSelected = state.selectedDocuments.includes(documentId)
+            if (isSelected) {
+              return { selectedDocuments: state.selectedDocuments.filter(id => id !== documentId) }
             } else {
-              newSelection.add(documentId)
+              return { selectedDocuments: [...state.selectedDocuments, documentId] }
             }
-            return { selectedDocuments: newSelection }
           }),
           
         selectAllDocuments: (documentIds) =>
-          set({ selectedDocuments: new Set(documentIds) }),
+          set({ selectedDocuments: documentIds }),
           
         clearSelection: () =>
-          set({ selectedDocuments: new Set() }),
+          set({ selectedDocuments: [] }),
           
         setCurrentDocument: (document) =>
           set({ currentDocument: document }),
@@ -75,6 +75,9 @@ export const useDocumentStore = create<DocumentState>()(
           
         setSortBy: (field) =>
           set({ sortBy: field }),
+          
+        setSortOrder: (order) =>
+          set({ sortOrder: order }),
           
         toggleSortOrder: () =>
           set((state) => ({
@@ -101,10 +104,10 @@ export const useDocumentStore = create<DocumentState>()(
 
 // Selector hooks for common use cases
 export const useSelectedDocumentCount = () =>
-  useDocumentStore((state) => state.selectedDocuments.size)
+  useDocumentStore((state) => state.selectedDocuments.length)
 
 export const useIsDocumentSelected = (documentId: string) =>
-  useDocumentStore((state) => state.selectedDocuments.has(documentId))
+  useDocumentStore((state) => state.selectedDocuments.includes(documentId))
 
 export const useDocumentViewPreferences = () =>
   useDocumentStore((state) => ({

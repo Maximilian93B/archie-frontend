@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { GlobalSearch } from '@/components/search/global-search'
+import { useSubscription } from '@/hooks/use-subscription'
+import { CreditCard } from 'lucide-react'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -46,6 +49,30 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  const { status, checkQuota } = useSubscription()
+  const [hasLimitWarning, setHasLimitWarning] = useState(false)
+  
+  useEffect(() => {
+    // Check for approaching limits
+    const checkLimits = async () => {
+      const quotas = await Promise.all([
+        checkQuota('documents', false),
+        checkQuota('storage', false),
+        checkQuota('ai_credits', false)
+      ])
+      
+      // Check if any quota is above 80%
+      const hasWarning = quotas.some(q => {
+        if (!q.limit || q.limit === -1) return false
+        const percentage = (q.used || 0) / q.limit * 100
+        return percentage >= 80
+      })
+      
+      setHasLimitWarning(hasWarning)
+    }
+    
+    checkLimits()
+  }, [])
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
@@ -116,6 +143,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <Separator className="my-2" />
 
+          {/* Subscription Status */}
+          {status && (
+            <div className="px-4 py-3">
+              <div className="text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{status.plan?.nickname || 'No Plan'}</span>
+                  {status.trial && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Trial</span>
+                  )}
+                </div>
+              </div>
+              <Link
+                href="/dashboard/billing"
+                className="flex items-center gap-2 mt-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                <CreditCard className="h-4 w-4" />
+                Billing & Usage
+              </Link>
+            </div>
+          )}
+
           {/* Bottom navigation */}
           <nav className="px-4 pb-4 space-y-1">
             {bottomNavigation.map((item) => {
@@ -170,6 +218,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Desktop header with search */}
+        <div className="hidden lg:flex items-center justify-between h-16 px-6 border-b border-gray-200 bg-white">
+          <div className="flex-1 max-w-xl">
+            <GlobalSearch />
+          </div>
+          <div className="flex items-center gap-4">
+            {/* Usage warnings */}
+            {hasLimitWarning && (
+              <Link href="/dashboard/billing" className="text-sm text-amber-600 hover:text-amber-700">
+                ⚠️ Approaching usage limits
+              </Link>
+            )}
+            <Button variant="ghost" size="icon">
+              <Search className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+
         {/* Mobile header */}
         <div className="lg:hidden flex items-center justify-between h-16 px-4 border-b border-gray-200 bg-white">
           <Button

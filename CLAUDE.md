@@ -73,8 +73,9 @@ NEXT_PUBLIC_API_URL=your-archivus-api-url
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000  # For OAuth callbacks
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... # Only if using Stripe Elements
 ```
+
+Note: No Stripe keys needed in frontend - all Stripe operations are backend-driven
 
 ### Key Backend Capabilities
 The backend supports far more than typical document management:
@@ -168,11 +169,14 @@ Key deliverables:
 - Hierarchical folder system with tags
 - Complete admin panel for user management
 
-### Stripe Integration (1-2 weeks)
-- Backend-driven checkout flow
-- Subscription management portal
-- Usage tracking and feature gating
-- Billing settings integration
+### Stripe Integration (Completed)
+- ✅ Backend-driven checkout flow with Stripe Checkout
+- ✅ Customer Portal integration for subscription management
+- ✅ Dynamic pricing page with monthly/yearly toggle
+- ✅ Usage tracking with quota enforcement via Stripe Entitlements
+- ✅ Improved checkout success page with plan details
+- ✅ Enhanced billing page with usage visualization
+- ✅ No client-side Stripe keys needed (secure backend-driven approach)
 
 ## Design System
 
@@ -264,25 +268,38 @@ Mobile (1-column):
 
 | Tier | Price (CAD) | Documents | Storage | AI Credits | Users |
 |------|-------------|-----------|---------|------------|-------|
+| **Individual** | $15/month | 100 | 1 GB | 50 | 1 |
 | **Starter** | $39/month | 1,000 | 5 GB | 100 | 5 |
 | **Professional** | $109/month | 10,000 | 50 GB | 1,000 | 25 |
 | **Enterprise** | $279/month | Unlimited | Unlimited | Unlimited | Unlimited |
 
-### Feature Gating
+Note: 20% discount available for yearly billing
+
+### Feature Gating & Quota Checking
 ```typescript
-// Check tier access
-const hasAccess = checkFeatureAccess(subscription, feature, requiredTier)
+// Using the unified subscription hook
+import { useSubscription } from '@/hooks/use-subscription'
 
-// Usage limits
-const { used, limit } = usage.documents
-if (limit !== -1 && used >= limit) {
-  toast.error("You've reached your document limit")
+function MyComponent() {
+  const { checkQuota, canAccessFeature } = useSubscription()
+  
+  // Check quota before action
+  const handleUpload = async () => {
+    const canUpload = await checkQuota('documents')
+    if (!canUpload) return // Toast shown automatically
+    
+    // Proceed with upload
+  }
+  
+  // Check feature access
+  const hasWorkflows = await canAccessFeature('custom_workflows')
+  
+  // Using withQuotaCheck wrapper
+  const uploadDocument = withQuotaCheck('documents', 
+    async (file) => { /* upload logic */ },
+    { reportUsage: true }
+  )
 }
-
-// Upgrade prompts
-<FeatureGate feature="workflows" tier="professional">
-  <WorkflowBuilder />
-</FeatureGate>
 ```
 
 ### Stripe Integration
@@ -326,3 +343,10 @@ Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.
 NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+
+## Memories
+- Claude Code helps developers understand the complex architecture of Archivus
+- Always refers to existing architectural documentation before making changes
+- Emphasizes type safety, performance, and scalable design patterns
+- Added memory tracking for Stripe UI Components file at @ARCHIVUS_STRIPE_UI_COMPONENTS.md
+- Added memory tracking for Auto-Tag Feature context file at @src/Auto-Tag-Feature-context.md

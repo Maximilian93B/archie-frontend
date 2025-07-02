@@ -15,6 +15,8 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
+import { TagFilter } from '@/components/tags/tag-filter'
+import { FolderSelector } from '@/components/folders/folder-selector'
 import type { DocumentType } from '@/types'
 
 export interface DocumentFilters {
@@ -173,57 +175,37 @@ export function DocumentFilter({
           </div>
 
           {/* Tags */}
-          {availableTags.length > 0 && (
-            <>
-              <Separator />
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Tag className="h-4 w-4" />
-                  <h3 className="font-medium">Tags</h3>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {availableTags.map(tag => (
-                    <Button
-                      key={tag}
-                      variant={localFilters.tags?.includes(tag) ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleTagToggle(tag)}
-                    >
-                      {tag}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          <Separator />
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Tag className="h-4 w-4" />
+              <h3 className="font-medium">Tags</h3>
+            </div>
+            <TagFilter
+              selectedTags={localFilters.tags || []}
+              onTagsChange={(tags) => setLocalFilters({
+                ...localFilters,
+                tags: tags.length > 0 ? tags : undefined,
+              })}
+            />
+          </div>
 
           {/* Folders */}
-          {availableFolders.length > 0 && (
-            <>
-              <Separator />
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Folder className="h-4 w-4" />
-                  <h3 className="font-medium">Folder</h3>
-                </div>
-                <select
-                  className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  value={localFilters.folder_id || ''}
-                  onChange={(e) => setLocalFilters({
-                    ...localFilters,
-                    folder_id: e.target.value || undefined,
-                  })}
-                >
-                  <option value="">All folders</option>
-                  {availableFolders.map(folder => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+          <Separator />
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Folder className="h-4 w-4" />
+              <h3 className="font-medium">Folder</h3>
+            </div>
+            <FolderSelector
+              value={localFilters.folder_id || null}
+              onChange={(folderId) => setLocalFilters({
+                ...localFilters,
+                folder_id: folderId || undefined,
+              })}
+              placeholder="All folders"
+            />
+          </div>
         </div>
 
         <SheetFooter>

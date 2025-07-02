@@ -195,7 +195,7 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center">
-                  <Search className="h-4 w-4 text-orange-600" />
+                  <Brain className="h-4 w-4 text-orange-600" />
                 </div>
                 <h4 className="font-medium">Hybrid Search</h4>
               </div>

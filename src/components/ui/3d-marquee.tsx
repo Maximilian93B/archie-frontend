@@ -1,8 +1,6 @@
 "use client"
 
 import type React from "react"
-
-import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
 
 export const ThreeDMarquee = ({
@@ -12,7 +10,7 @@ export const ThreeDMarquee = ({
   images: string[]
   className?: string
 }) => {
-  // Create 4 columns for balanced density and card size
+  // Split the images array into 4 equal parts
   const chunkSize = Math.ceil(images.length / 4)
   const chunks = Array.from({ length: 4 }, (_, colIndex) => {
     const start = colIndex * chunkSize
@@ -20,54 +18,60 @@ export const ThreeDMarquee = ({
   })
 
   return (
-    <div className={cn("absolute inset-0 w-full h-full overflow-hidden", className)}>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-[2800px] h-[2800px] shrink-0 scale-45 sm:scale-55 md:scale-70 lg:scale-85">
+    <div className={cn("mx-auto block h-[600px] overflow-hidden rounded-2xl max-sm:h-100", className)}>
+      <div className="flex size-full items-center justify-center">
+        <div className="size-[1720px] shrink-0 scale-50 sm:scale-75 lg:scale-100">
           <div
             style={{
-              transform: "rotateX(60deg) rotateY(0deg) rotateZ(-45deg)",
+              transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full grid grid-cols-4 gap-1 transform-3d"
+            className="relative top-96 right-[50%] grid size-full origin-top-left grid-cols-4 gap-8 transform-3d"
           >
             {chunks.map((subarray, colIndex) => (
-              <motion.div
-                animate={{ 
-                  y: colIndex % 2 === 0 ? [0, -80, -160, -80, 0] : [0, 80, 160, 80, 0]
-                }}
-                transition={{
-                  duration: 20 + colIndex * 3,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: [0.25, 0.1, 0.25, 1],
-                  times: [0, 0.25, 0.5, 0.75, 1],
-                }}
+              <div
                 key={colIndex + "marquee"}
-                className="flex flex-col items-center gap-1 -mx-6"
+                className="flex flex-col items-start gap-8"
+                style={{
+                  animation: `marquee-${colIndex % 2 === 0 ? 'up' : 'down'} ${colIndex % 2 === 0 ? 80 : 90}s linear infinite`,
+                  willChange: "transform",
+                }}
               >
-                <GridLineVertical className="left-0" offset="20px" />
+                {/* First set of images */}
                 {subarray.map((image, imageIndex) => (
-                  <div className="relative -my-1" key={imageIndex + image}>
-                    <GridLineHorizontal className="top-0" offset="8px" />
-                    <motion.img
-                      whileHover={{
-                        y: -12,
-                        rotateX: -3,
-                        rotateY: 3,
-                        scale: 1.05,
-                      }}
-                      transition={{
-                        duration: 0.4,
-                        ease: [0.25, 0.1, 0.25, 1],
-                      }}
-                      key={imageIndex + image}
+                  <div 
+                    className="relative group" 
+                    key={`first-${imageIndex}-${image}`}
+                    style={{ willChange: "transform" }}
+                  >
+                    <img
                       src={image}
                       alt={`Image ${imageIndex + 1}`}
-                      className="aspect-[3/4] w-60 rounded-xl object-cover ring ring-neutral-950/5 shadow-lg shadow-neutral-900/25 hover:shadow-xl hover:shadow-neutral-900/35 transition-all duration-400"
-                      width={240}
-                      height={320}
+                      className="aspect-[970/700] rounded-lg object-cover bg-white border border-gray-200 transition-all duration-500 ease-out group-hover:shadow-xl group-hover:border-gray-300 group-hover:scale-105 group-hover:-translate-y-2"
+                      width={970}
+                      height={700}
+                      loading="lazy"
                     />
                   </div>
                 ))}
-              </motion.div>
+                
+                {/* Duplicate set for seamless loop */}
+                {subarray.map((image, imageIndex) => (
+                  <div 
+                    className="relative group" 
+                    key={`second-${imageIndex}-${image}`}
+                    style={{ willChange: "transform" }}
+                  >
+                    <img
+                      src={image}
+                      alt={`Image ${imageIndex + 1}`}
+                      className="aspect-[970/700] rounded-lg object-cover bg-white border border-gray-200 transition-all duration-500 ease-out group-hover:shadow-xl group-hover:border-gray-300 group-hover:scale-105 group-hover:-translate-y-2"
+                      width={970}
+                      height={700}
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+              </div>
             ))}
           </div>
         </div>
@@ -87,13 +91,13 @@ const GridLineHorizontal = ({
     <div
       style={
         {
-          "--background": "#ffffff",
-          "--color": "rgba(0, 0, 0, 0.08)",
+          "--background": "#f9fafb", // gray-50
+          "--color": "rgba(0, 0, 0, 0.1)",
           "--height": "1px",
-          "--width": "2px",
-          "--fade-stop": "94%",
+          "--width": "5px",
+          "--fade-stop": "90%",
           "--offset": offset || "200px",
-          "--color-dark": "rgba(255, 255, 255, 0.08)",
+          "--color-dark": "rgba(255, 255, 255, 0.1)",
           maskComposite: "exclude",
         } as React.CSSProperties
       }
@@ -122,13 +126,13 @@ const GridLineVertical = ({
     <div
       style={
         {
-          "--background": "#ffffff",
-          "--color": "rgba(0, 0, 0, 0.08)",
-          "--height": "2px",
+          "--background": "#f9fafb", // gray-50
+          "--color": "rgba(0, 0, 0, 0.1)",
+          "--height": "5px",
           "--width": "1px",
-          "--fade-stop": "94%",
+          "--fade-stop": "90%",
           "--offset": offset || "150px",
-          "--color-dark": "rgba(255, 255, 255, 0.08)",
+          "--color-dark": "rgba(255, 255, 255, 0.1)",
           maskComposite: "exclude",
         } as React.CSSProperties
       }

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
 import type { User, LoginCredentials, RegisterData, AuthContextType } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { useSubscriptionStore } from '@/store/subscription-store';
+import Cookies from 'js-cookie';
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -37,6 +39,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const storedToken = localStorage.getItem('access_token');
         
         if (storedToken) {
+          // Note: We don't know the expiration time here, so we'll validate it
           apiClient.setToken(storedToken);
           setToken(storedToken);
           
@@ -44,9 +47,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const userData = await apiClient.validateToken();
           setUser(userData);
           
-          // Store tenant ID if available
-          if (userData.tenant_id) {
-            localStorage.setItem('tenant_id', userData.tenant_id);
+          // Store tenant subdomain if available
+          if (userData.tenant_subdomain || userData.company) {
+            // Use tenant_subdomain if available, otherwise derive from company name
+            const subdomain = userData.tenant_subdomain || userData.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (subdomain) {
+              localStorage.setItem('tenant_subdomain', subdomain);
+            }
+          }
+          
+          // Fetch subscription status
+          try {
+            const subscriptionStore = useSubscriptionStore.getState();
+            await subscriptionStore.fetchStatus();
+            
+            // Set subscription cookies for middleware
+            const subscription = subscriptionStore.subscription;
+            if (subscription) {
+              Cookies.set('has_subscription', String(subscription.isActive), { expires: 1 });
+              Cookies.set('is_trialing', String(subscription.isTrialing), { expires: 1 });
+            } else {
+              Cookies.set('has_subscription', 'false', { expires: 1 });
+              Cookies.set('is_trialing', 'false', { expires: 1 });
+            }
+          } catch (subError) {
+            console.warn('Failed to fetch subscription status on init:', subError);
           }
         }
       } catch (error) {
@@ -54,7 +79,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Clear invalid tokens
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        localStorage.removeItem('tenant_id');
+        localStorage.removeItem('tenant_subdomain');
         apiClient.clearToken();
       } finally {
         setIsLoading(false);
@@ -74,9 +99,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(response.user);
       setToken(response.token);
       
-      // Store tenant ID
-      if (response.user.tenant_id) {
-        localStorage.setItem('tenant_id', response.user.tenant_id);
+      // Store tenant subdomain
+      if (response.user.tenant_subdomain || response.user.company) {
+        // Use tenant_subdomain if available, otherwise derive from company name
+        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (subdomain) {
+          localStorage.setItem('tenant_subdomain', subdomain);
+        }
+      }
+      
+      // Fetch subscription status after login
+      try {
+        const subscriptionStore = useSubscriptionStore.getState();
+        await subscriptionStore.fetchStatus();
+        
+        // Set subscription cookies for middleware
+        const status = subscriptionStore.status;
+        if (status) {
+          const hasActiveSubscription = status.status === 'active' || status.status === 'trialing';
+          const isTrialing = status.trial === true;
+          Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
+          Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
+        } else {
+          Cookies.set('has_subscription', 'false', { expires: 1 });
+          Cookies.set('is_trialing', 'false', { expires: 1 });
+        }
+      } catch (subError) {
+        console.warn('Failed to fetch subscription status:', subError);
+        // Don't fail login if subscription check fails
       }
       
       toast({
@@ -111,11 +161,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem('access_token', response.token);
       localStorage.setItem('refresh_token', response.refresh_token);
       
-      if (response.user.tenant_id) {
-        localStorage.setItem('tenant_id', response.user.tenant_id);
+      if (response.user.tenant_subdomain || response.user.company) {
+        // Use tenant_subdomain if available, otherwise derive from company name
+        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (subdomain) {
+          localStorage.setItem('tenant_subdomain', subdomain);
+        }
       }
       
-      apiClient.setToken(response.token);
+      apiClient.setToken(response.token, response.expires_in);
       
       toast({
         title: 'Success',
@@ -147,41 +201,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setToken(null);
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
-      localStorage.removeItem('tenant_id');
+      localStorage.removeItem('tenant_subdomain');
       apiClient.clearToken();
+      
+      // Clear subscription state and cookies
+      const subscriptionStore = useSubscriptionStoreV2.getState();
+      subscriptionStore.clearCache();
+      Cookies.remove('has_subscription');
+      Cookies.remove('is_trialing');
       
       router.push('/auth/login');
     }
   };
 
   const refreshToken = async (): Promise<boolean> => {
-    try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) return false;
-
-      const response = await apiClient.post<any>('/api/v1/auth/refresh', {
-        refresh_token: refreshToken,
-      });
-
-      if (response.token) {
-        setToken(response.token);
-        localStorage.setItem('access_token', response.token);
-        localStorage.setItem('refresh_token', response.refresh_token);
-        apiClient.setToken(response.token);
-        return true;
+    // Use the API client's refreshToken method which handles everything
+    const success = await apiClient.refreshToken();
+    
+    if (success) {
+      // Update local state with the new token
+      const newToken = apiClient.getStoredToken();
+      if (newToken) {
+        setToken(newToken);
       }
-      
-      return false;
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      return false;
     }
+    
+    return success;
   };
 
-  const setAuth = async (userData: User, accessToken: string) => {
+  const setAuth = async (userData: User, accessToken: string, expiresIn?: number) => {
     setUser(userData);
     setToken(accessToken);
-    apiClient.setToken(accessToken);
+    apiClient.setToken(accessToken, expiresIn);
   };
 
   const value: AuthContextType = {

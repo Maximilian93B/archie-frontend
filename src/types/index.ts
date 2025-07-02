@@ -13,15 +13,21 @@ export interface User {
   company?: string;
   role: 'admin' | 'user' | 'viewer';
   tenant_id: string;
+  tenant_subdomain?: string; // Added for multi-tenant header
   is_active: boolean;
   last_login_at?: string;
   created_at: string;
   updated_at: string;
+  // Subscription info (optional - populated after fetching subscription status)
+  subscription_tier?: 'starter' | 'professional' | 'enterprise';
+  subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled';
+  trial_ends_at?: string;
 }
 
 export interface LoginCredentials {
   email: string;
   password: string;
+  subdomain?: string; // Optional subdomain for multi-tenant login
 }
 
 export interface RegisterData {
@@ -30,6 +36,7 @@ export interface RegisterData {
   first_name: string;
   last_name: string;
   company?: string;
+  registration_type?: 'individual' | 'organization';
 }
 
 export interface LoginResponse {
@@ -71,11 +78,41 @@ export type ProcessingStatus =
   | 'completed'
   | 'failed';
 
+// AI Tag Types
+export interface AITag {
+  name: string;
+  category: TagCategory;
+  confidence: number;  // 0.0 - 1.0
+  relevance: number;   // 0.0 - 1.0
+}
+
+export type TagCategory =
+  | "document_type"
+  | "department"
+  | "project"
+  | "topic"
+  | "compliance"
+  | "priority"
+  | "year"
+  | "month"
+  | "client"
+  | "vendor";
+
 export interface Tag {
   id: string;
   name: string;
   color?: string;
+  is_ai_generated?: boolean;
+  usage_count?: number;
   created_at: string;
+}
+
+export interface DocumentTagsResponse {
+  tags: AITag[];           // AI-generated tags with metadata
+  user_tags: string[];     // User-created tags (simple strings)
+  categories: string[];    // List of categories present
+  keywords?: string[];     // Optional keywords from AI analysis
+  topics?: string[];       // Optional topics from AI analysis
 }
 
 export interface Category {
@@ -84,6 +121,53 @@ export interface Category {
   description?: string;
   color?: string;
   created_at: string;
+}
+
+// ================================
+// 📁 Folder Types
+// ================================
+
+export interface Folder {
+  id: string;
+  tenant_id: string;
+  parent_id?: string;
+  name: string;
+  description?: string;
+  path: string;
+  level: number;
+  is_system: boolean;
+  color?: string;
+  icon?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  // Frontend-specific fields
+  children?: Folder[];
+  document_count?: number;
+  is_expanded?: boolean;
+}
+
+export interface CreateFolderRequest {
+  name: string;
+  parent_id?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateFolderRequest {
+  name?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  parent_id?: string;
+}
+
+export interface FolderTreeNode extends Folder {
+  children: FolderTreeNode[];
+  document_count: number;
+  is_expanded: boolean;
+  is_selected?: boolean;
 }
 
 export interface Document {
@@ -100,10 +184,22 @@ export interface Document {
   tenant_id: string;
   user_id: string;
   folder_id?: string;
+  folder_name?: string;
   ai_processed: boolean;
+  ai_processed_at?: string;
   embedding_status: ProcessingStatus;
-  tags: Tag[];
-  categories: Category[];
+  // New AI processing fields
+  ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  ai_summary?: string;
+  ai_entities?: string[];
+  ai_key_points?: string[];
+  ai_category?: string;
+  ai_confidence_score?: number;
+  // Relationships (optional based on API includes)
+  tags?: Tag[];
+  categories?: Category[];
+  folder?: Folder;
+  starred?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -140,6 +236,17 @@ export interface DocumentListParams {
   date_to?: string;
 }
 
+export interface DocumentFilters {
+  document_types?: DocumentType[];
+  ai_processed?: boolean;
+  folder_id?: string;
+  date_range?: {
+    from: Date;
+    to: Date;
+  };
+  tags?: string[];
+}
+
 export interface UploadOptions {
   title?: string;
   enable_ai?: boolean;
@@ -151,12 +258,21 @@ export interface UploadOptions {
 export interface AIResults {
   document_id: string;
   extracted_entities: Record<string, any>;
+  entities?: {
+    people?: string[];
+    organizations?: string[];
+    locations?: string[];
+    dates?: string[];
+    amounts?: string[];
+  };
   classification: {
     document_type: DocumentType;
     confidence: number;
   };
   summary: string;
   key_points: string[];
+  suggested_tags?: string[];
+  sentiment?: 'positive' | 'negative' | 'neutral';
   processing_metadata: {
     processing_time_ms: number;
     model_used: string;
@@ -182,9 +298,10 @@ export interface ChatSession {
   id: string;
   document_id: string;
   user_id: string;
-  title: string;
+  session_name: string;
   is_active: boolean;
   messages: ChatMessage[];
+  document?: Document;
   created_at: string;
   updated_at: string;
 }

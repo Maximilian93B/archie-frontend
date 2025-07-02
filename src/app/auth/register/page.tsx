@@ -1,77 +1,221 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Mail, Lock, User, Building } from 'lucide-react'
+import { Loader2, Mail, Lock, User, Building, Globe, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { RegistrationTypeSelector } from '@/components/auth/registration-type-selector'
+import { RegistrationSuccess } from '@/components/auth/registration-success'
 
-const registerSchema = z.object({
+// Schema for organization registration
+const organizationSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
   first_name: z.string().min(1, 'First name is required'),
   last_name: z.string().min(1, 'Last name is required'),
-  company: z.string().optional(),
+  company: z.string().min(1, 'Company name is required'),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
 })
 
-type RegisterFormData = z.infer<typeof registerSchema>
+// Schema for individual registration
+const individualSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string(),
+  first_name: z.string().min(1, 'First name is required'),
+  last_name: z.string().min(1, 'Last name is required'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ['confirmPassword'],
+})
+
+type OrganizationFormData = z.infer<typeof organizationSchema>
+type IndividualFormData = z.infer<typeof individualSchema>
 
 export default function RegisterPage() {
+  const [registrationType, setRegistrationType] = useState<'individual' | 'organization' | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [generatedSubdomain, setGeneratedSubdomain] = useState('')
+  const [registrationSuccess, setRegistrationSuccess] = useState<{subdomain: string, email: string} | null>(null)
   const router = useRouter()
   const { register: registerUser } = useAuth()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
+  // Organization form
+  const organizationForm = useForm<OrganizationFormData>({
+    resolver: zodResolver(organizationSchema),
   })
 
-  const onSubmit = async (data: RegisterFormData) => {
+  // Individual form
+  const individualForm = useForm<IndividualFormData>({
+    resolver: zodResolver(individualSchema),
+  })
+
+  const companyName = organizationForm.watch('company')
+
+  // Generate subdomain from company name or user name
+  useEffect(() => {
+    if (registrationType === 'organization' && companyName) {
+      const subdomain = companyName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 63)
+      setGeneratedSubdomain(subdomain)
+    } else if (registrationType === 'individual') {
+      const firstName = individualForm.watch('first_name')
+      const lastName = individualForm.watch('last_name')
+      if (firstName || lastName) {
+        const name = `${firstName || ''}-${lastName || ''}`.toLowerCase()
+        const randomSuffix = Math.random().toString(36).substring(2, 7)
+        const subdomain = `${name}-${randomSuffix}`
+          .replace(/[^a-z0-9-]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .substring(0, 63)
+        setGeneratedSubdomain(subdomain)
+      }
+    }
+  }, [companyName, registrationType, individualForm.watch('first_name'), individualForm.watch('last_name')])
+
+  const onSubmitOrganization = async (data: OrganizationFormData) => {
     try {
       setIsLoading(true)
       const { confirmPassword, ...registerData } = data
-      await registerUser(registerData)
-      router.push('/dashboard')
+      
+      // Add registration type to indicate organization
+      const registrationPayload = {
+        ...registerData,
+        registration_type: 'organization'
+      }
+      
+      const user = await registerUser(registrationPayload)
+      
+      // Use the subdomain from the backend response
+      const subdomain = user.tenant_subdomain || generatedSubdomain
+      
+      setRegistrationSuccess({
+        subdomain: subdomain,
+        email: data.email
+      })
     } catch (error) {
-      // Error is handled by the auth context
+      // Error handled by auth context
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const onSubmitIndividual = async (data: IndividualFormData) => {
+    try {
+      setIsLoading(true)
+      const { confirmPassword, ...registerData } = data
+      
+      // Add registration type and auto-generated company name
+      const registrationPayload = {
+        ...registerData,
+        company: `${data.first_name} ${data.last_name}'s Workspace`,
+        registration_type: 'individual'
+      }
+      
+      const user = await registerUser(registrationPayload)
+      
+      // Use the subdomain from the backend response
+      const subdomain = user.tenant_subdomain || generatedSubdomain
+      
+      setRegistrationSuccess({
+        subdomain: subdomain,
+        email: data.email
+      })
+    } catch (error) {
+      // Error handled by auth context
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleOAuthSignup = (provider: 'google' | 'github') => {
-    // OAuth signup will be implemented with Supabase
-    console.log(`Sign up with ${provider}`)
+    // Store registration type and company name for OAuth callback
+    sessionStorage.setItem('oauth_registration_type', registrationType)
+    if (registrationType === 'organization' && formData.company) {
+      sessionStorage.setItem('oauth_company_name', formData.company)
+    }
+    
+    // Redirect to backend OAuth endpoint with registration type
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+    const params = new URLSearchParams({
+      type: registrationType,
+      ...(registrationType === 'organization' && formData.company ? { company: formData.company } : {})
+    })
+    
+    window.location.href = `${apiUrl}/api/v1/auth/oauth/${provider}?${params}`
   }
+
+  // Show success screen if registration complete
+  if (registrationSuccess) {
+    return (
+      <RegistrationSuccess
+        subdomain={registrationSuccess.subdomain}
+        email={registrationSuccess.email}
+        onContinue={() => {
+          // Option 1: Redirect to pricing (current flow)
+          router.push('/pricing')
+          
+          // Option 2: Redirect to subdomain (uncomment to enable)
+          // const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || 'archivus.app'
+          // const protocol = appDomain.includes('localhost') ? 'http' : 'https'
+          // window.location.href = `${protocol}://${registrationSuccess.subdomain}.${appDomain}/dashboard`
+        }}
+      />
+    )
+  }
+
+  // Show type selector if no type selected
+  if (!registrationType) {
+    return <RegistrationTypeSelector onSelect={setRegistrationType} />
+  }
+
+  // Show appropriate registration form
+  const isOrganization = registrationType === 'organization'
+  const form = isOrganization ? organizationForm : individualForm
+  const onSubmit = isOrganization ? onSubmitOrganization : onSubmitIndividual
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="flex items-center justify-between mb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRegistrationType(null)}
+              className="text-gray-600"
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Back
+            </Button>
+          </div>
           <CardTitle className="text-2xl font-bold text-center">
-            Create an account
+            Create {isOrganization ? 'organization' : 'personal'} account
           </CardTitle>
           <CardDescription className="text-center">
-            Start managing your documents with AI
+            {isOrganization 
+              ? 'Set up your team workspace'
+              : 'Start managing your documents with AI'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="first_name">First name</Label>
@@ -82,11 +226,11 @@ export default function RegisterPage() {
                     placeholder="John"
                     className="pl-10"
                     disabled={isLoading}
-                    {...register('first_name')}
+                    {...form.register('first_name')}
                   />
                 </div>
-                {errors.first_name && (
-                  <p className="text-sm text-red-600">{errors.first_name.message}</p>
+                {form.formState.errors.first_name && (
+                  <p className="text-sm text-red-600">{form.formState.errors.first_name.message}</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -98,27 +242,53 @@ export default function RegisterPage() {
                     placeholder="Doe"
                     className="pl-10"
                     disabled={isLoading}
-                    {...register('last_name')}
+                    {...form.register('last_name')}
                   />
                 </div>
-                {errors.last_name && (
-                  <p className="text-sm text-red-600">{errors.last_name.message}</p>
+                {form.formState.errors.last_name && (
+                  <p className="text-sm text-red-600">{form.formState.errors.last_name.message}</p>
                 )}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="company">Company (optional)</Label>
-              <div className="relative">
-                <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="company"
-                  placeholder="Acme Corp"
-                  className="pl-10"
-                  disabled={isLoading}
-                  {...register('company')}
-                />
+            
+            {/* Only show company field for organizations */}
+            {isOrganization && (
+              <div className="space-y-2">
+                <Label htmlFor="company">Company name</Label>
+                <div className="relative">
+                  <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="company"
+                    placeholder="Acme Corp"
+                    className="pl-10"
+                    disabled={isLoading}
+                    {...organizationForm.register('company')}
+                  />
+                </div>
+                {organizationForm.formState.errors.company && (
+                  <p className="text-sm text-red-600">{organizationForm.formState.errors.company.message}</p>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* Show subdomain preview */}
+            {generatedSubdomain && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-md">
+                <div className="flex items-center gap-2 text-sm">
+                  <Globe className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-600">Your Archivus URL will be:</span>
+                </div>
+                <p className="font-mono text-sm mt-1">
+                  {generatedSubdomain}.archivus.app
+                </p>
+                {!isOrganization && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    You can change this later in settings
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -129,11 +299,11 @@ export default function RegisterPage() {
                   placeholder="name@example.com"
                   className="pl-10"
                   disabled={isLoading}
-                  {...register('email')}
+                  {...form.register('email')}
                 />
               </div>
-              {errors.email && (
-                <p className="text-sm text-red-600">{errors.email.message}</p>
+              {form.formState.errors.email && (
+                <p className="text-sm text-red-600">{form.formState.errors.email.message}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -146,11 +316,11 @@ export default function RegisterPage() {
                   placeholder="Create a password"
                   className="pl-10"
                   disabled={isLoading}
-                  {...register('password')}
+                  {...form.register('password')}
                 />
               </div>
-              {errors.password && (
-                <p className="text-sm text-red-600">{errors.password.message}</p>
+              {form.formState.errors.password && (
+                <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -163,11 +333,11 @@ export default function RegisterPage() {
                   placeholder="Confirm your password"
                   className="pl-10"
                   disabled={isLoading}
-                  {...register('confirmPassword')}
+                  {...form.register('confirmPassword')}
                 />
               </div>
-              {errors.confirmPassword && (
-                <p className="text-sm text-red-600">{errors.confirmPassword.message}</p>
+              {form.formState.errors.confirmPassword && (
+                <p className="text-sm text-red-600">{form.formState.errors.confirmPassword.message}</p>
               )}
             </div>
             <Button

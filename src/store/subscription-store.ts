@@ -1,0 +1,247 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { subscriptionAPI } from '@/lib/api/subscription'
+import type { 
+  SubscriptionStatus, 
+  QuotaCheck,
+  PricingPlan,
+  FeatureName
+} from '@/types/subscription'
+
+interface SubscriptionStore {
+  // State
+  status: SubscriptionStatus | null
+  plans: PricingPlan[]
+  quotaCache: Record<string, QuotaCheck>
+  isLoading: boolean
+  error: string | null
+  lastFetched: {
+    status: number
+    plans: number
+    quota: Record<string, number>
+  }
+
+  // Actions
+  fetchStatus: () => Promise<void>
+  fetchPlans: () => Promise<void>
+  checkQuota: (feature: 'documents' | 'storage' | 'ai_credits' | 'api_calls') => Promise<QuotaCheck>
+  reportUsage: (metric: 'documents' | 'storage' | 'ai_credits' | 'api_calls', value: number) => Promise<void>
+  checkFeatureAccess: (feature: FeatureName) => Promise<boolean>
+  createCheckoutSession: (lookupKey: string, options?: { successUrl?: string; cancelUrl?: string; customerEmail?: string }) => Promise<string>
+  createPortalSession: (returnUrl?: string) => Promise<string>
+  clearCache: () => void
+
+  // Computed helpers
+  hasActiveSubscription: () => boolean
+  isTrialing: () => boolean
+  getCurrentPlan: () => PricingPlan | null
+  canAccessFeature: (feature: FeatureName) => boolean
+}
+
+const CACHE_DURATION = {
+  status: 5 * 60 * 1000,    // 5 minutes
+  plans: 60 * 60 * 1000,    // 1 hour
+  quota: 60 * 1000          // 1 minute
+}
+
+export const useSubscriptionStore = create<SubscriptionStore>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      status: null,
+      plans: [],
+      quotaCache: {},
+      isLoading: false,
+      error: null,
+      lastFetched: {
+        status: 0,
+        plans: 0,
+        quota: {}
+      },
+
+      // Fetch subscription status
+      fetchStatus: async () => {
+        const now = Date.now()
+        const lastChecked = get().lastFetched.status
+
+        // Use cache if fresh
+        if (lastChecked && now - lastChecked < CACHE_DURATION.status) {
+          return
+        }
+
+        set({ isLoading: true, error: null })
+        try {
+          const status = await subscriptionAPI.getStatus()
+          set({ 
+            status, 
+            lastFetched: { ...get().lastFetched, status: now },
+            isLoading: false 
+          })
+        } catch (error) {
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to fetch subscription status',
+            isLoading: false 
+          })
+        }
+      },
+
+      // Fetch available plans
+      fetchPlans: async () => {
+        const now = Date.now()
+        const lastChecked = get().lastFetched.plans
+
+        // Use cache if fresh
+        if (get().plans.length > 0 && lastChecked && now - lastChecked < CACHE_DURATION.plans) {
+          return
+        }
+
+        try {
+          const plans = await subscriptionAPI.getPlans()
+          set({ 
+            plans,
+            lastFetched: { ...get().lastFetched, plans: now }
+          })
+        } catch (error) {
+          console.error('Failed to fetch plans:', error)
+        }
+      },
+
+      // Check quota with caching
+      checkQuota: async (feature) => {
+        const now = Date.now()
+        const cached = get().quotaCache[feature]
+        const lastChecked = get().lastFetched.quota[feature]
+
+        // Use cache if fresh
+        if (cached && lastChecked && now - lastChecked < CACHE_DURATION.quota) {
+          return cached
+        }
+
+        try {
+          const quota = await subscriptionAPI.checkQuota(feature)
+          
+          // Add percentage calculation
+          const enhancedQuota: QuotaCheck = {
+            ...quota,
+            percentage: quota.limit && quota.used !== undefined 
+              ? Math.round((quota.used / quota.limit) * 100)
+              : 0
+          }
+          
+          set(state => ({
+            quotaCache: { ...state.quotaCache, [feature]: enhancedQuota },
+            lastFetched: {
+              ...state.lastFetched,
+              quota: { ...state.lastFetched.quota, [feature]: now }
+            }
+          }))
+          return enhancedQuota
+        } catch (error) {
+          console.error('Failed to check quota:', error)
+          // Return a safe default that blocks the action
+          return { feature, allowed: false, limit: 0, used: 0, remaining: 0, percentage: 0 }
+        }
+      },
+
+      // Report usage
+      reportUsage: async (metric, value) => {
+        try {
+          await subscriptionAPI.reportUsage({ metric, value })
+          // Invalidate quota cache for this metric
+          const { quotaCache, lastFetched } = get()
+          delete quotaCache[metric]
+          delete lastFetched.quota[metric]
+          set({ quotaCache, lastFetched })
+        } catch (error) {
+          console.error('Failed to report usage:', error)
+          // Don't throw - usage reporting shouldn't block operations
+        }
+      },
+
+      // Check feature access
+      checkFeatureAccess: async (feature) => {
+        try {
+          const { allowed } = await subscriptionAPI.checkFeatureAccess(feature)
+          return allowed
+        } catch (error) {
+          console.error('Failed to check feature access:', error)
+          return false
+        }
+      },
+
+      // Create Stripe checkout session
+      createCheckoutSession: async (lookupKey, options = {}) => {
+        const { url } = await subscriptionAPI.createCheckoutSession({
+          lookupKey,
+          successUrl: options.successUrl || `${window.location.origin}/subscription/success`,
+          cancelUrl: options.cancelUrl || `${window.location.origin}/pricing?canceled=true`,
+          customerEmail: options.customerEmail
+        })
+        return url
+      },
+
+      // Create Stripe customer portal session
+      createPortalSession: async (returnUrl) => {
+        const { url } = await subscriptionAPI.createPortalSession({
+          returnUrl: returnUrl || window.location.href
+        })
+        return url
+      },
+
+      // Clear all caches
+      clearCache: () => {
+        set({
+          quotaCache: {},
+          lastFetched: { status: 0, plans: 0, quota: {} }
+        })
+      },
+
+      // Computed helpers
+      hasActiveSubscription: () => {
+        const { status } = get()
+        return status?.hasSubscription && status?.isActive || false
+      },
+
+      isTrialing: () => {
+        const { status } = get()
+        return status?.hasSubscription && status?.isTrialing || false
+      },
+
+      getCurrentPlan: () => {
+        const { status, plans } = get()
+        if (!status?.plan || plans.length === 0) return null
+        
+        return plans.find(plan => 
+          plan.monthlyLookupKey === status.plan.lookupKey ||
+          plan.yearlyLookupKey === status.plan.lookupKey
+        ) || null
+      },
+
+      canAccessFeature: (feature) => {
+        const { status } = get()
+        if (!status?.hasSubscription || !status?.isActive) return false
+        
+        // Check if feature is included in current plan
+        const plan = get().getCurrentPlan()
+        if (!plan) return false
+        
+        // Basic features available to all plans
+        const basicFeatures: FeatureName[] = ['documents', 'storage', 'ai_credits']
+        if (basicFeatures.includes(feature)) return true
+        
+        // Check premium features
+        const premiumFeatures = plan.features.premium || []
+        return premiumFeatures.some(f => f.toLowerCase().includes(feature.replace('_', ' ')))
+      }
+    }),
+    {
+      name: 'subscription-store',
+      // Only persist non-sensitive cached data
+      partialize: (state) => ({
+        status: state.status,
+        plans: state.plans,
+        lastFetched: state.lastFetched
+      })
+    }
+  )
+)

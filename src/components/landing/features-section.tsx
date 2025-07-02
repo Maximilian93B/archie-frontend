@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 import { cn } from "@/lib/utils"
 import createGlobe from "cobe"
 import { useEffect, useRef } from "react"
@@ -10,33 +10,33 @@ import { IconApi, IconSparkles, IconRocket, IconShield, IconBrain, IconSearch } 
 export default function FeaturesSection() {
   const features = [
     {
-      title: "Intelligent Document Processing",
+      title: "AI-Powered Document Intelligence",
       description:
-        "AI automatically analyzes, categorizes, and extracts key insights from your documents the moment they're uploaded.",
+        "Upload any document and watch as AI instantly extracts insights, generates summaries, and surfaces key information—turning static files into dynamic knowledge.",
       skeleton: <SkeletonOne />,
       icon: <IconBrain className="h-5 w-5 text-neutral-700" />,
       className: "col-span-1 lg:col-span-4",
     },
     {
-      title: "Smart Search & Discovery",
+      title: "Conversational Search",
       description:
-        "Find any document instantly with AI-powered search that understands context, not just keywords.",
+        "Ask questions in plain English. Our AI understands context and intent, finding exactly what you need across thousands of documents in seconds.",
       skeleton: <SkeletonTwo />,
       icon: <IconSearch className="h-5 w-5 text-neutral-700" />,
       className: "col-span-1 lg:col-span-2",
     },
     {
-      title: "Developer-First APIs",
+      title: "Enterprise-Ready API",
       description:
-        "Built for seamless integration with comprehensive REST APIs that scale with your business needs.",
+        "85+ REST endpoints, webhook support, and comprehensive SDKs. Built for developers who demand reliability, speed, and flexibility.",
       skeleton: <SkeletonThree />,
       icon: <IconApi className="h-5 w-5 text-neutral-700" />,
       className: "col-span-1 lg:col-span-3",
     },
     {
-      title: "Enterprise Performance",
+      title: "Lightning-Fast Performance",
       description:
-        "Built with Go for unmatched speed and reliability. Handle millions of documents with sub-second response times.",
+        "Built with Go and optimized for speed. Process millions of documents with sub-second response times and 99.9% uptime guarantee.",
       skeleton: <SkeletonFour />,
       icon: <IconRocket className="h-5 w-5 text-neutral-700" />,
       className: "col-span-1 lg:col-span-3",
@@ -44,61 +44,130 @@ export default function FeaturesSection() {
   ]
 
   return (
-    <div className="relative py-24 lg:py-32 bg-neutral-50">
+    <div className="relative py-32 lg:py-40 bg-gradient-to-b from-white via-neutral-50/30 to-white">
       {/* Minimal Background Pattern */}
-      <div className="absolute inset-0 opacity-[0.01]">
-        <div className="absolute top-40 left-20 w-72 h-72 border border-neutral-300 rotate-12 rounded-[2rem]"></div>
-        <div className="absolute bottom-32 right-24 w-96 h-96 border border-neutral-300 -rotate-6 rounded-[2.5rem]"></div>
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 border border-neutral-300 rotate-45 rounded-[1.5rem]"></div>
+      <div className="absolute inset-0 opacity-[0.02]">
+        <div className="absolute top-40 left-20 w-72 h-72 border border-neutral-200 rotate-12 rounded-[2rem] animate-pulse transform-gpu" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute bottom-32 right-24 w-96 h-96 border border-neutral-200 -rotate-6 rounded-[2.5rem] animate-pulse transform-gpu" style={{ animationDelay: '1.5s' }}></div>
+        <div className="absolute top-1/3 right-1/4 w-64 h-64 border border-neutral-200 rotate-45 rounded-[1.5rem] animate-pulse transform-gpu" style={{ animationDelay: '2.5s' }}></div>
       </div>
+      
+      {/* Subtle gradient orbs for depth */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-100/20 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-100/20 rounded-full blur-3xl"></div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-8">
         {/* Header Section */}
-        <div className="text-center mb-20">
-          <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-700 mb-8">
+        <div className="text-center mb-24">
+          <motion.div 
+            initial={{ opacity: 0, y: 20, filter: "blur(10px)" }}
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{ 
+              duration: 0.8, 
+              ease: [0.16, 1, 0.3, 1]
+            }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-50 to-orange-100 px-5 py-2.5 text-sm font-medium text-orange-700 mb-8 border border-orange-200/50"
+            style={{ willChange: "transform, opacity, filter" }}
+          >
             <IconSparkles className="h-4 w-4" />
-            Powered by AI
-          </div>
+            AI-Powered Features
+          </motion.div>
 
-          <h2 className="mx-auto max-w-4xl text-3xl font-light tracking-tight text-neutral-900 md:text-4xl lg:text-5xl mb-6 leading-[1.2]">
+          <motion.h2 
+            initial={{ opacity: 0, y: 30, filter: "blur(10px)" }}
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{ 
+              duration: 0.8, 
+              delay: 0.1, 
+              ease: [0.16, 1, 0.3, 1]
+            }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="mx-auto max-w-4xl text-4xl font-light tracking-tight text-neutral-900 md:text-5xl lg:text-6xl mb-6 leading-[1.15]"
+            style={{ willChange: "transform, opacity, filter" }}
+          >
             Everything you need to{" "}
-            <span className="font-medium text-neutral-900">
+            <span className="bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 bg-clip-text text-transparent font-medium">
               transform documents
             </span>
-            {" "}into intelligence.
-          </h2>
+          </motion.h2>
 
-          <p className="mx-auto max-w-2xl text-lg text-neutral-600 font-light leading-relaxed">
-            From automatic document processing to intelligent search and analytics, 
-            Archivus provides the complete toolkit for modern document management.
-          </p>
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ 
+              duration: 0.8, 
+              delay: 0.2, 
+              ease: [0.16, 1, 0.3, 1]
+            }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="mx-auto max-w-2xl text-xl text-neutral-600 font-light leading-[1.6] tracking-wide"
+            style={{ willChange: "transform, opacity" }}
+          >
+            From automatic processing to intelligent search and analytics, 
+            Archivus provides the complete toolkit for modern document intelligence.
+          </motion.p>
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1, ease: [0.21, 0.47, 0.32, 0.98] }}
+              transition={{ 
+                duration: 0.8,
+                delay: index * 0.15,
+                ease: [0.16, 1, 0.3, 1]
+              }}
+              viewport={{ once: true, margin: "-50px" }}
+              style={{ willChange: "transform, opacity" }}
               className={cn(feature.className)}
             >
               <FeatureCard>
-                <div className="flex items-start gap-4 mb-6">
-                  <div className="p-3 rounded-xl bg-white shadow-sm border border-neutral-200/60">
-                    {feature.icon}
+                <div className="mb-8">
+                  <div className="p-3 rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100/50 inline-flex mb-6 border border-orange-200/20">
+                    {React.cloneElement(feature.icon, { className: "h-6 w-6 text-orange-600" })}
                   </div>
-                  <div className="flex-1">
-                    <FeatureTitle>{feature.title}</FeatureTitle>
-                    <FeatureDescription>{feature.description}</FeatureDescription>
-                  </div>
+                  <FeatureTitle>{feature.title}</FeatureTitle>
+                  <FeatureDescription>{feature.description}</FeatureDescription>
                 </div>
                 <div className="h-full w-full">{feature.skeleton}</div>
               </FeatureCard>
             </motion.div>
           ))}
         </div>
+
+        {/* Key Differentiators */}
+        <motion.div 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 1,
+            delay: 0.6,
+            ease: [0.16, 1, 0.3, 1]
+          }}
+          viewport={{ once: true, margin: "-100px" }}
+          className="mt-32 text-center"
+          style={{ willChange: "transform, opacity" }}
+        >
+          <h3 className="text-2xl font-light text-neutral-900 mb-8">Why teams choose Archivus</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="text-4xl font-semibold text-orange-600 mb-2">10x</div>
+              <p className="text-sm text-neutral-600">Faster document retrieval</p>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-semibold text-orange-600 mb-2">85%</div>
+              <p className="text-sm text-neutral-600">Less time organizing files</p>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-semibold text-orange-600 mb-2">99.9%</div>
+              <p className="text-sm text-neutral-600">Uptime guarantee</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   )
@@ -106,58 +175,105 @@ export default function FeaturesSection() {
 
 const FeatureCard = ({ children }: { children?: React.ReactNode }) => {
   return (
-    <div className="group relative h-full overflow-hidden rounded-2xl bg-white border border-neutral-200/60 p-8 shadow-sm transition-all duration-700 hover:shadow-lg hover:shadow-neutral-900/10 hover:border-neutral-300/80 hover:-translate-y-1">
-      <div className="absolute inset-0 bg-gradient-to-br from-neutral-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+    <div className="group relative h-full overflow-hidden rounded-3xl p-8 transition-transform duration-700 ease-out hover:scale-[1.01] transform-gpu" style={{ willChange: "transform" }}>
+      {/* Glassmorphism background */}
+      <div className="absolute inset-0 bg-white/40 backdrop-blur-xl border border-white/20 rounded-3xl"></div>
+      
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-white/30 to-transparent opacity-60"></div>
+      
+      {/* Subtle inner shadow for depth */}
+      <div className="absolute inset-0 rounded-3xl shadow-inner"></div>
+      
+      {/* Hover effect */}
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-50/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out"></div>
+      
+      {/* Border glow on hover */}
+      <div className="absolute inset-0 rounded-3xl border border-orange-200/0 group-hover:border-orange-200/40 transition-colors duration-700 ease-out"></div>
+      
       <div className="relative z-10">{children}</div>
     </div>
   )
 }
 
 const FeatureTitle = ({ children }: { children?: React.ReactNode }) => {
-  return <h3 className="text-lg font-medium tracking-tight text-neutral-900 mb-3">{children}</h3>
+  return <h3 className="text-xl font-semibold tracking-tight text-neutral-900 mb-3">{children}</h3>
 }
 
 const FeatureDescription = ({ children }: { children?: React.ReactNode }) => {
-  return <p className="text-sm text-neutral-600 font-light leading-relaxed">{children}</p>
+  return <p className="text-base text-neutral-600 font-light leading-[1.6]">{children}</p>
 }
 
 export const SkeletonOne = () => {
   return (
-    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-neutral-50 to-white border border-neutral-200/40">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-neutral-50 to-white border border-neutral-200/40">
       <div className="p-6 space-y-4">
         {/* Document Icons */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-10 bg-gradient-to-br from-red-100 to-red-200 rounded border border-red-300/60 flex items-center justify-center">
-            <span className="text-xs font-medium text-red-600">PDF</span>
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ 
+            duration: 0.6,
+            delay: 0.2,
+            ease: [0.16, 1, 0.3, 1]
+          }}
+          viewport={{ once: true }}
+          className="flex items-center gap-4"
+          style={{ willChange: "transform, opacity" }}
+        >
+          <div className="w-10 h-12 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200/60 flex items-center justify-center shadow-sm">
+            <span className="text-xs font-semibold text-red-600">PDF</span>
           </div>
           <div className="flex-1 space-y-2">
-            <div className="h-2 bg-neutral-200 rounded-full w-3/4"></div>
-            <div className="h-1.5 bg-neutral-100 rounded-full w-1/2"></div>
+            <div className="h-2.5 bg-neutral-200/80 rounded-full w-3/4"></div>
+            <div className="h-2 bg-neutral-100 rounded-full w-1/2"></div>
           </div>
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-        </div>
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse"></div>
+        </motion.div>
         
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-10 bg-gradient-to-br from-blue-100 to-blue-200 rounded border border-blue-300/60 flex items-center justify-center">
-            <span className="text-xs font-medium text-blue-600">DOC</span>
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ 
+            duration: 0.6,
+            delay: 0.3,
+            ease: [0.16, 1, 0.3, 1]
+          }}
+          viewport={{ once: true }}
+          className="flex items-center gap-4"
+          style={{ willChange: "transform, opacity" }}
+        >
+          <div className="w-10 h-12 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200/60 flex items-center justify-center shadow-sm">
+            <span className="text-xs font-semibold text-blue-600">DOC</span>
           </div>
           <div className="flex-1 space-y-2">
-            <div className="h-2 bg-neutral-200 rounded-full w-2/3"></div>
-            <div className="h-1.5 bg-neutral-100 rounded-full w-3/4"></div>
+            <div className="h-2.5 bg-neutral-200/80 rounded-full w-2/3"></div>
+            <div className="h-2 bg-neutral-100 rounded-full w-3/4"></div>
           </div>
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-        </div>
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse"></div>
+        </motion.div>
 
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-10 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded border border-emerald-300/60 flex items-center justify-center">
-            <span className="text-xs font-medium text-emerald-600">XLS</span>
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ 
+            duration: 0.6,
+            delay: 0.4,
+            ease: [0.16, 1, 0.3, 1]
+          }}
+          viewport={{ once: true }}
+          className="flex items-center gap-4"
+          style={{ willChange: "transform, opacity" }}
+        >
+          <div className="w-10 h-12 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200/60 flex items-center justify-center shadow-sm">
+            <span className="text-xs font-semibold text-emerald-600">XLS</span>
           </div>
           <div className="flex-1 space-y-2">
-            <div className="h-2 bg-neutral-200 rounded-full w-5/6"></div>
-            <div className="h-1.5 bg-neutral-100 rounded-full w-2/3"></div>
+            <div className="h-2.5 bg-neutral-200/80 rounded-full w-5/6"></div>
+            <div className="h-2 bg-neutral-100 rounded-full w-2/3"></div>
           </div>
-          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-        </div>
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse"></div>
+        </motion.div>
       </div>
     </div>
   )
@@ -165,16 +281,26 @@ export const SkeletonOne = () => {
 
 export const SkeletonTwo = () => {
   return (
-    <div className="relative h-full p-6 bg-gradient-to-br from-neutral-50 to-white border border-neutral-200/40 rounded-xl">
+    <div className="relative h-full p-6 bg-gradient-to-br from-neutral-50 to-white border border-neutral-200/40 rounded-2xl">
       {/* Search Bar */}
-      <div className="relative mb-6">
-        <div className="w-full h-10 bg-white border border-neutral-200 rounded-lg flex items-center px-3 shadow-sm">
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ 
+          duration: 0.6,
+          ease: [0.16, 1, 0.3, 1]
+        }}
+        viewport={{ once: true }}
+        className="relative mb-6"
+        style={{ willChange: "transform, opacity" }}
+      >
+        <div className="w-full h-12 bg-white border border-neutral-200 rounded-xl flex items-center px-4 shadow-sm">
           <svg className="w-4 h-4 text-neutral-400 mr-2" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <div className="h-3 bg-neutral-200 rounded w-32 animate-pulse"></div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Search Results */}
       <div className="space-y-3">
@@ -198,7 +324,7 @@ export const SkeletonTwo = () => {
 export const SkeletonThree = () => {
   return (
     <div className="relative h-full">
-      <div className="rounded-xl bg-neutral-900 p-6 h-full overflow-hidden shadow-lg border border-neutral-800">
+      <div className="rounded-2xl bg-neutral-900 p-6 h-full overflow-hidden shadow-xl border border-neutral-800">
         <div className="flex items-center gap-2 mb-6">
           <div className="w-3 h-3 rounded-full bg-red-500"></div>
           <div className="w-3 h-3 rounded-full bg-amber-500"></div>
@@ -222,8 +348,8 @@ export const SkeletonThree = () => {
 
 export const SkeletonFour = () => {
   return (
-    <div className="h-60 md:h-60 flex flex-col items-center relative bg-transparent mt-10">
-      <Globe className="absolute -right-10 md:-right-10 -bottom-80 md:-bottom-72" />
+    <div className="h-64 md:h-64 flex flex-col items-center relative bg-transparent mt-10">
+      <Globe className="absolute -right-10 md:-right-10 -bottom-80 md:-bottom-72 opacity-90" />
     </div>
   )
 }
@@ -245,9 +371,9 @@ export const Globe = ({ className }: { className?: string }) => {
       diffuse: 1.2,
       mapSamples: 16000,
       mapBrightness: 1.8,
-      baseColor: [0.9, 0.9, 0.9],
-      markerColor: [0.2, 0.2, 0.2],
-      glowColor: [0.95, 0.95, 0.95],
+      baseColor: [0.95, 0.95, 0.98],
+      markerColor: [0.55, 0.35, 0.96],
+      glowColor: [0.55, 0.35, 0.96],
       markers: [
         { location: [37.7595, -122.4367], size: 0.03 },
         { location: [40.7128, -74.006], size: 0.1 },
@@ -257,7 +383,7 @@ export const Globe = ({ className }: { className?: string }) => {
       ],
       onRender: (state) => {
         state.phi = phi
-        phi += 0.008
+        phi += 0.005
       },
     })
 

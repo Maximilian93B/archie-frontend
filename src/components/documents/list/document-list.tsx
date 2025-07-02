@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ProcessingStatusBadge } from '@/components/documents/processing-status-badge'
 import { formatDate, formatBytes, getDocumentTypeColor } from '@/lib/utils'
 import type { Document } from '@/types'
 import { cn } from '@/lib/utils'
@@ -177,12 +178,10 @@ function DocumentListItem({
                   <Calendar className="h-3 w-3 mr-1" />
                   {formatDate(document.created_at)}
                 </span>
-                {document.ai_processed && (
-                  <span className="flex items-center text-green-600">
-                    <Sparkles className="h-3 w-3 mr-0.5" />
-                    AI Processed
-                  </span>
-                )}
+                <ProcessingStatusBadge 
+                  status={document.ai_processing_status} 
+                  aiProcessed={document.ai_processed}
+                />
               </div>
             </div>
           </div>
@@ -295,12 +294,11 @@ function DocumentGridItem({
             <span className={cn('px-2 py-0.5 rounded-full text-xs', getDocumentTypeColor(document.document_type))}>
               {document.document_type}
             </span>
-            {document.ai_processed && (
-              <span className="flex items-center text-green-600">
-                <Sparkles className="h-3 w-3 mr-0.5" />
-                AI
-              </span>
-            )}
+            <ProcessingStatusBadge 
+              status={document.ai_processing_status} 
+              aiProcessed={document.ai_processed}
+              className="h-5"
+            />
           </div>
 
           <div className="flex items-center gap-3 text-xs text-gray-500">

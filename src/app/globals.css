@@ -110,3 +110,61 @@ body {
 .animate-out {
   animation: out 0.2s ease-in;
 }
+
+/* Hero Section Smooth Animations */
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px) rotate(12deg); 
+  }
+  50% { 
+    transform: translateY(-20px) rotate(12deg); 
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 0.3; 
+    transform: scale(1); 
+  }
+  50% { 
+    opacity: 1; 
+    transform: scale(1.2); 
+  }
+}
+
+/* Performance optimizations */
+.transform-3d {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* GPU acceleration for animations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 3D Marquee Smooth Animations */
+@keyframes marquee-up {
+  0% {
+    transform: translateY(0px);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes marquee-down {
+  0% {
+    transform: translateY(0px);
+  }
+  100% {
+    transform: translateY(50%);
+  }
+}

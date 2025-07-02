@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Grid3X3, List, Search, Filter } from 'lucide-react'
+import { Plus, Grid3X3, List, Search, Filter, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DocumentList } from '@/components/documents/list/document-list'
@@ -107,12 +107,20 @@ export default function DocumentsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Documents</h2>
           <p className="text-gray-500">Manage and organize your documents</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/upload">
-            <Plus className="mr-2 h-4 w-4" />
-            Upload
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/documents/compare">
+              <Brain className="mr-2 h-4 w-4" />
+              Compare Documents
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/upload">
+              <Plus className="mr-2 h-4 w-4" />
+              Upload
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filter Bar */}

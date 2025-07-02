@@ -1,238 +1,335 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api/client';
-import { toast } from 'react-hot-toast';
-import type {
-  ChatSession,
-  CreateChatSessionRequest,
-  AskQuestionRequest,
-  ChatMessage,
-} from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { chatAPI, transformToFrontendSession, transformToFrontendMessage } from '@/lib/api/chat'
+import { useChatStore } from '@/store/chat-store'
+import { toast } from 'react-hot-toast'
+import type { 
+  CreateSessionRequest, 
+  AskQuestionRequest, 
+  UpdateSessionNameRequest, 
+  SearchSessionsParams,
+  GenerateSuggestionsRequest 
+} from '@/lib/api/chat'
 
-// Query Keys
-export const chatKeys = {
+// Query keys for React Query
+export const chatQueryKeys = {
   all: ['chat'] as const,
-  sessions: () => [...chatKeys.all, 'sessions'] as const,
-  session: (id: string) => [...chatKeys.sessions(), id] as const,
-  documentSessions: (documentId: string) => [...chatKeys.sessions(), 'document', documentId] as const,
-};
-
-// ================================
-// 💬 Chat Session Queries
-// ================================
-
-export function useChatSessions() {
-  return useQuery({
-    queryKey: chatKeys.sessions(),
-    queryFn: () => apiClient.getChatSessions(),
-    staleTime: 2 * 60 * 1000, // 2 minutes
-  });
+  sessions: () => [...chatQueryKeys.all, 'sessions'] as const,
+  session: (id: string) => [...chatQueryKeys.all, 'session', id] as const,
+  documentSessions: (documentId: string) => [...chatQueryKeys.all, 'document-sessions', documentId] as const,
+  search: (params: SearchSessionsParams) => [...chatQueryKeys.all, 'search', params] as const,
+  stats: () => [...chatQueryKeys.all, 'stats'] as const,
+  suggestions: (params: GenerateSuggestionsRequest) => [...chatQueryKeys.all, 'suggestions', params] as const
 }
 
-export function useChatSession(sessionId: string) {
+/**
+ * Hook to fetch all chat sessions
+ */
+export function useChatSessions(params: {
+  page?: number
+  page_size?: number
+  document_id?: string
+} = {}) {
+  const { 
+    addSession, 
+    setIsFetchingSessions, 
+    setPagination,
+    regroupSessions 
+  } = useChatStore()
+
   return useQuery({
-    queryKey: chatKeys.session(sessionId),
-    queryFn: () => apiClient.getChatSession(sessionId),
-    enabled: !!sessionId,
-    staleTime: 30 * 1000, // 30 seconds - chat sessions update frequently
-    refetchInterval: 5000, // Refetch every 5 seconds to get new messages
-  });
-}
-
-// ================================
-// 💬 Chat Session Mutations
-// ================================
-
-export function useCreateChatSession() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (data: CreateChatSessionRequest) => apiClient.createChatSession(data),
-    onSuccess: (newSession, variables) => {
-      toast.success('Chat session created!');
-      
-      // Add to sessions list
-      queryClient.setQueryData<ChatSession[]>(
-        chatKeys.sessions(),
-        (old) => old ? [newSession, ...old] : [newSession]
-      );
-      
-      // Cache the new session
-      queryClient.setQueryData(chatKeys.session(newSession.id), newSession);
-      
-      // Invalidate document sessions if needed
-      if (variables.document_id) {
-        queryClient.invalidateQueries({
-          queryKey: chatKeys.documentSessions(variables.document_id)
-        });
+    queryKey: [...chatQueryKeys.sessions(), params],
+    queryFn: async () => {
+      setIsFetchingSessions(true)
+      try {
+        const response = await chatAPI.getSessions(params)
+        
+        // Update pagination
+        setPagination({
+          page: response.page,
+          pageSize: response.page_size,
+          total: response.total,
+          totalPages: response.total_pages
+        })
+        
+        // Transform and add sessions to store
+        const frontendSessions = response.sessions.map(transformToFrontendSession)
+        frontendSessions.forEach(session => addSession(session))
+        
+        // Regroup sessions
+        regroupSessions()
+        
+        return response
+      } finally {
+        setIsFetchingSessions(false)
       }
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Failed to create chat session';
-      toast.error(message);
-    },
-  });
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  })
 }
 
-export function useAskQuestion() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: ({ sessionId, question }: { sessionId: string; question: string }) =>
-      apiClient.askQuestion(sessionId, { question }),
-    onSuccess: (response, { sessionId }) => {
-      // Update the session with new message
-      queryClient.setQueryData<ChatSession>(
-        chatKeys.session(sessionId),
-        (old) => {
-          if (!old) return old;
-          
-          // Add user message and AI response
-          const userMessage: ChatMessage = {
-            id: `temp-user-${Date.now()}`,
-            role: 'user',
-            content: response.question || '',
-            claude_model: '',
-            token_count: 0,
-            created_at: new Date().toISOString(),
-          };
-          
-          const aiMessage: ChatMessage = response.message || {
-            id: `temp-ai-${Date.now()}`,
-            role: 'assistant',
-            content: response.content || '',
-            claude_model: response.claude_model_used || 'claude-sonnet-4',
-            token_count: response.token_usage?.output_tokens || 0,
-            created_at: new Date().toISOString(),
-          };
-          
-          return {
-            ...old,
-            messages: [...old.messages, userMessage, aiMessage],
-            updated_at: new Date().toISOString(),
-          };
-        }
-      );
+/**
+ * Hook to fetch a specific chat session
+ */
+export function useChatSession(sessionId: string | null) {
+  const { updateSession } = useChatStore()
+
+  return useQuery({
+    queryKey: chatQueryKeys.session(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) return null
       
-      // Invalidate to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: chatKeys.session(sessionId) });
+      const response = await chatAPI.getSession(sessionId)
+      const frontendSession = transformToFrontendSession(response)
+      
+      // Update session in store
+      updateSession(sessionId, frontendSession)
+      
+      return response
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Failed to send message';
-      toast.error(message);
-    },
-  });
+    enabled: !!sessionId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  })
 }
 
+/**
+ * Hook to create a new chat session
+ */
+export function useCreateChatSession() {
+  const queryClient = useQueryClient()
+  const { addSession, setCurrentSession } = useChatStore()
+
+  return useMutation({
+    mutationFn: async (request: CreateSessionRequest) => {
+      return await chatAPI.createSession(request)
+    },
+    onSuccess: (response) => {
+      const frontendSession = transformToFrontendSession(response)
+      
+      // Add to store and set as current
+      addSession(frontendSession)
+      setCurrentSession(frontendSession.id)
+      
+      // Invalidate sessions query
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions() })
+      
+      toast.success('New chat session created')
+    },
+    onError: (error) => {
+      console.error('Failed to create chat session:', error)
+      toast.error('Failed to create chat session')
+    }
+  })
+}
+
+/**
+ * Hook to update session name
+ */
 export function useUpdateSessionName() {
-  const queryClient = useQueryClient();
-  
+  const queryClient = useQueryClient()
+  const { updateSession } = useChatStore()
+
   return useMutation({
-    mutationFn: ({ sessionId, name }: { sessionId: string; name: string }) =>
-      apiClient.updateSessionName(sessionId, name),
-    onSuccess: (updatedSession, { sessionId }) => {
-      toast.success('Session name updated!');
-      
-      // Update session in cache
-      queryClient.setQueryData(chatKeys.session(sessionId), updatedSession);
-      
-      // Update sessions list
-      queryClient.setQueryData<ChatSession[]>(
-        chatKeys.sessions(),
-        (old) => old?.map(session => 
-          session.id === sessionId ? updatedSession : session
-        )
-      );
+    mutationFn: async ({ sessionId, sessionName }: { sessionId: string; sessionName: string }) => {
+      return await chatAPI.updateSessionName(sessionId, { session_name: sessionName })
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Failed to update session name';
-      toast.error(message);
+    onSuccess: (response, { sessionId }) => {
+      const frontendSession = transformToFrontendSession(response)
+      
+      // Update session in store
+      updateSession(sessionId, { sessionName: frontendSession.sessionName })
+      
+      // Update cached data
+      queryClient.setQueryData(chatQueryKeys.session(sessionId), response)
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions() })
+      
+      toast.success('Session name updated')
     },
-  });
+    onError: (error) => {
+      console.error('Failed to update session name:', error)
+      toast.error('Failed to update session name')
+    }
+  })
 }
 
+/**
+ * Hook to delete a chat session
+ */
 export function useDeleteChatSession() {
-  const queryClient = useQueryClient();
-  
+  const queryClient = useQueryClient()
+  const { removeSession, setCurrentSession, currentSessionId } = useChatStore()
+
   return useMutation({
-    mutationFn: (sessionId: string) => apiClient.deleteSession(sessionId),
+    mutationFn: async (sessionId: string) => {
+      return await chatAPI.deleteSession(sessionId)
+    },
     onSuccess: (_, sessionId) => {
-      toast.success('Chat session deleted!');
+      // Remove from store
+      removeSession(sessionId)
       
-      // Remove from sessions list
-      queryClient.setQueryData<ChatSession[]>(
-        chatKeys.sessions(),
-        (old) => old?.filter(session => session.id !== sessionId)
-      );
+      // If this was the current session, clear it
+      if (currentSessionId === sessionId) {
+        setCurrentSession(null)
+      }
       
-      // Remove session cache
-      queryClient.removeQueries({ queryKey: chatKeys.session(sessionId) });
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions() })
+      queryClient.removeQueries({ queryKey: chatQueryKeys.session(sessionId) })
+      
+      toast.success('Session deleted')
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Failed to delete session';
-      toast.error(message);
-    },
-  });
+    onError: (error) => {
+      console.error('Failed to delete session:', error)
+      toast.error('Failed to delete session')
+    }
+  })
 }
 
-// ================================
-// 💬 Optimistic Updates
-// ================================
+/**
+ * Hook to ask a question in a chat session
+ */
+export function useAskQuestion() {
+  const queryClient = useQueryClient()
+  const { 
+    addMessage, 
+    updateMessage, 
+    setIsAsking, 
+    canSendMessage, 
+    incrementMessageCount 
+  } = useChatStore()
 
-export function useOptimisticMessage() {
-  const queryClient = useQueryClient();
-  
+  return useMutation({
+    mutationFn: async ({ sessionId, question }: { sessionId: string; question: string }) => {
+      // Check rate limit
+      if (!canSendMessage()) {
+        throw new Error('Rate limit exceeded. Please wait before sending another message.')
+      }
+      
+      setIsAsking(true)
+      incrementMessageCount()
+      
+      return await chatAPI.askQuestion(sessionId, { question })
+    },
+    onSuccess: (response, { sessionId, question }) => {
+      // Add user message
+      const userMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user' as const,
+        content: question,
+        timestamp: new Date().toISOString(),
+        status: 'sent' as const
+      }
+      addMessage(sessionId, userMessage)
+      
+      // Add assistant response
+      const assistantMessage = transformToFrontendMessage(response.message)
+      addMessage(sessionId, assistantMessage)
+      
+      // Update session queries
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.session(sessionId) })
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions() })
+      
+      setIsAsking(false)
+    },
+    onError: (error, { sessionId }) => {
+      console.error('Failed to send message:', error)
+      setIsAsking(false)
+      
+      // Show error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      toast.error(errorMessage)
+    }
+  })
+}
+
+/**
+ * Hook to search chat sessions
+ */
+export function useSearchChatSessions() {
+  const { setSearchResults, setSearchQuery } = useChatStore()
+
+  return useMutation({
+    mutationFn: async (params: SearchSessionsParams) => {
+      return await chatAPI.searchSessions(params)
+    },
+    onSuccess: (response, params) => {
+      const frontendSessions = response.sessions.map(transformToFrontendSession)
+      setSearchResults(frontendSessions)
+      setSearchQuery(params.q)
+    },
+    onError: (error) => {
+      console.error('Failed to search sessions:', error)
+      toast.error('Search failed')
+    }
+  })
+}
+
+/**
+ * Hook to get chat suggestions
+ */
+export function useChatSuggestions(params: GenerateSuggestionsRequest) {
+  return useQuery({
+    queryKey: chatQueryKeys.suggestions(params),
+    queryFn: async () => {
+      return await chatAPI.generateSuggestions(params)
+    },
+    enabled: !!params.document_id || !!params.context,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+/**
+ * Hook to get chat statistics
+ */
+export function useChatStats() {
+  return useQuery({
+    queryKey: chatQueryKeys.stats(),
+    queryFn: async () => {
+      return await chatAPI.getStats()
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 60 * 1000, // Refetch every minute
+  })
+}
+
+/**
+ * Hook to get sessions for a specific document
+ */
+export function useDocumentSessions(documentId: string | null) {
+  const { addSession } = useChatStore()
+
+  return useQuery({
+    queryKey: chatQueryKeys.documentSessions(documentId || ''),
+    queryFn: async () => {
+      if (!documentId) return []
+      
+      const sessions = await chatAPI.getDocumentSessions(documentId)
+      
+      // Transform and add to store
+      const frontendSessions = sessions.map(transformToFrontendSession)
+      frontendSessions.forEach(session => addSession(session))
+      
+      return sessions
+    },
+    enabled: !!documentId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  })
+}
+
+/**
+ * Hook to pin/unpin sessions
+ */
+export function usePinSession() {
+  const { pinSession, unpinSession } = useChatStore()
+
   return {
-    addMessage: (sessionId: string, message: string) => {
-      const tempMessage: ChatMessage = {
-        id: `temp-${Date.now()}`,
-        role: 'user',
-        content: message,
-        claude_model: '',
-        token_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      
-      queryClient.setQueryData<ChatSession>(
-        chatKeys.session(sessionId),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            messages: [...old.messages, tempMessage],
-          };
-        }
-      );
-      
-      return tempMessage.id;
+    pinSession: (sessionId: string) => {
+      pinSession(sessionId)
+      toast.success('Session pinned')
     },
-    
-    removeMessage: (sessionId: string, messageId: string) => {
-      queryClient.setQueryData<ChatSession>(
-        chatKeys.session(sessionId),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            messages: old.messages.filter(msg => msg.id !== messageId),
-          };
-        }
-      );
-    },
-  };
+    unpinSession: (sessionId: string) => {
+      unpinSession(sessionId)
+      toast.success('Session unpinned')
+    }
+  }
 }
-
-// ================================
-// 💬 Prefetch Utilities
-// ================================
-
-export function usePrefetchChatSession() {
-  const queryClient = useQueryClient();
-  
-  return (sessionId: string) => {
-    queryClient.prefetchQuery({
-      queryKey: chatKeys.session(sessionId),
-      queryFn: () => apiClient.getChatSession(sessionId),
-      staleTime: 30 * 1000, // 30 seconds
-    });
-  };
-} 

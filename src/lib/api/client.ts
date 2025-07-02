@@ -1,5 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { toast } from '@/hooks/use-toast';
+import { InterceptorManager } from './interceptors';
+import { csrfTokenManager } from './csrf';
+import { DEFAULT_TIMEOUTS, RequestConfig } from './request-config';
 import type {
   LoginCredentials,
   LoginResponse,
@@ -26,114 +29,125 @@ import type {
 class ArchivusAPIClient {
   private client: AxiosInstance;
   private token: string | null = null;
+  private interceptorManager: InterceptorManager;
+  private tokenExpiresAt: number | null = null;
+  private refreshTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.client = axios.create({
       baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
-      timeout: 30000,
+      timeout: DEFAULT_TIMEOUTS.default,
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true, // Enable cookies for CSRF
     });
 
-    this.setupInterceptors();
-  }
-
-  private setupInterceptors() {
-    // Request interceptor for auth
-    this.client.interceptors.request.use(
-      (config) => {
-        // Get token from storage or instance
-        const token = this.token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        
-        // Add tenant header if available
-        const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null;
-        if (tenantId) {
-          config.headers['X-Tenant-ID'] = tenantId;
-        }
-        
-        return config;
-      },
-      (error) => Promise.reject(error)
+    this.interceptorManager = new InterceptorManager(
+      this.client,
+      () => this.getStoredToken(),
+      () => this.refreshToken(),
+      () => this.handleUnauthorized()
     );
 
-    // Response interceptor for error handling
-    this.client.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        return this.handleError(error);
-      }
-    );
+    this.interceptorManager.setupInterceptors();
   }
 
-  private async handleError(error: any) {
-    if (error.response?.status === 401) {
-      // Try to refresh token
-      const refreshed = await this.refreshToken();
-      if (refreshed) {
-        // Retry original request
-        return this.client.request(error.config);
-      } else {
-        // Redirect to login
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
-        }
-        return Promise.reject(error);
-      }
+  private handleUnauthorized() {
+    // Clear all auth data
+    this.clearAuth();
+    
+    // Redirect to login
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/login';
     }
-
-    // Handle rate limiting
-    if (error.response?.status === 429) {
-      const retryAfter = error.response.headers['retry-after'] || '60';
-      toast({
-        title: 'Rate limit exceeded',
-        description: `Please wait ${retryAfter} seconds.`,
-        variant: 'destructive',
-      });
-    }
-
-    // Handle other errors
-    if (error.response?.data?.message) {
-      toast({
-        title: 'Error',
-        description: error.response.data.message,
-        variant: 'destructive',
-      });
-    }
-
-    return Promise.reject(error);
   }
 
-  setToken(token: string) {
+  private clearAuth() {
+    this.token = null;
+    this.tokenExpiresAt = null;
+    
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('tenant_subdomain');
+    }
+    
+    csrfTokenManager.clearToken();
+  }
+
+  private scheduleTokenRefresh() {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+
+    if (!this.tokenExpiresAt) {
+      return;
+    }
+
+    // Refresh 5 minutes before expiration
+    const refreshTime = this.tokenExpiresAt - 5 * 60 * 1000;
+    const timeUntilRefresh = refreshTime - Date.now();
+
+    if (timeUntilRefresh > 0) {
+      this.refreshTimer = setTimeout(() => {
+        this.refreshToken().catch(console.error);
+      }, timeUntilRefresh);
+    }
+  }
+
+  setToken(token: string, expiresIn?: number) {
     this.token = token;
+    
+    if (expiresIn) {
+      this.tokenExpiresAt = Date.now() + expiresIn * 1000;
+      this.scheduleTokenRefresh();
+    }
   }
 
   clearToken() {
-    this.token = null;
+    this.clearAuth();
   }
 
-  // Generic request methods
-  private async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.get<T>(url, config);
+  getStoredToken(): string | null {
+    return this.token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+  }
+
+  // Generic request methods with enhanced config
+  private async get<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+    const response = await this.client.get<T>(url, this.mergeConfig(config));
     return response.data;
   }
 
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.post<T>(url, data, config);
+  async post<T>(url: string, data?: any, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+    const response = await this.client.post<T>(url, data, this.mergeConfig(config));
     return response.data;
   }
 
-  private async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.put<T>(url, data, config);
+  private async put<T>(url: string, data?: any, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+    const response = await this.client.put<T>(url, data, this.mergeConfig(config));
     return response.data;
   }
 
-  private async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.client.delete<T>(url, config);
+  private async delete<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+    const response = await this.client.delete<T>(url, this.mergeConfig(config));
     return response.data;
+  }
+
+  private mergeConfig(config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): AxiosRequestConfig {
+    const requestConfig = config?.requestConfig;
+    const timeout = requestConfig?.timeout || config?.timeout;
+    
+    return {
+      ...config,
+      timeout,
+      signal: requestConfig?.signal || config?.signal,
+    };
   }
 
   // ================================
@@ -141,31 +155,79 @@ class ArchivusAPIClient {
   // ================================
 
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    const response = await this.post<LoginResponse>('/api/v1/auth/login', credentials);
+    // Extract subdomain from credentials if provided
+    const { subdomain, ...loginData } = credentials;
+    
+    // If subdomain is provided, add it as a header
+    const headers: any = {};
+    if (subdomain) {
+      headers['X-Tenant-Subdomain'] = subdomain;
+    }
+    
+    const response = await this.post<LoginResponse>('/api/v1/auth/login', loginData, {
+      headers,
+      requestConfig: {
+        timeout: DEFAULT_TIMEOUTS.auth,
+        skipAuth: true,
+        skipCSRF: true, // Login doesn't need CSRF
+      }
+    });
     
     // Store tokens
     if (typeof window !== 'undefined') {
       localStorage.setItem('access_token', response.token);
       localStorage.setItem('refresh_token', response.refresh_token);
+      
+      // Store subdomain - prefer response subdomain over input
+      const tenantSubdomain = response.user?.tenant_subdomain || subdomain;
+      if (tenantSubdomain) {
+        localStorage.setItem('tenant_subdomain', tenantSubdomain);
+      }
     }
-    this.setToken(response.token);
+    
+    // Set token with expiration (assuming 1 hour if not provided)
+    const expiresIn = response.expires_in || 3600;
+    this.setToken(response.token, expiresIn);
     
     return response;
   }
 
   async register(data: RegisterData): Promise<LoginResponse> {
-    return this.post<LoginResponse>('/api/v1/auth/register', data);
+    const response = await this.post<LoginResponse>('/api/v1/auth/register', data, {
+      requestConfig: {
+        timeout: DEFAULT_TIMEOUTS.auth,
+        skipAuth: true,
+        skipCSRF: true, // Registration doesn't need CSRF
+      }
+    });
+    
+    // Store tokens
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('access_token', response.token);
+      localStorage.setItem('refresh_token', response.refresh_token);
+      
+      // Store subdomain if available
+      if (response.user?.tenant_subdomain) {
+        localStorage.setItem('tenant_subdomain', response.user.tenant_subdomain);
+      }
+    }
+    
+    // Set token with expiration
+    const expiresIn = response.expires_in || 3600;
+    this.setToken(response.token, expiresIn);
+    
+    return response;
   }
 
   async logout(): Promise<void> {
     try {
-      await this.post('/api/v1/auth/logout');
+      await this.post('/api/v1/auth/logout', null, {
+        requestConfig: {
+          silent: true, // Don't show error if logout fails
+        }
+      });
     } finally {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-      }
-      this.clearToken();
+      this.clearAuth();
     }
   }
 
@@ -173,7 +235,39 @@ class ArchivusAPIClient {
     return this.get<User>('/api/v1/auth/validate');
   }
 
-  private async refreshToken(): Promise<boolean> {
+  async lookupSubdomain(email: string): Promise<{ subdomains: Array<{ subdomain: string; tenant_name: string }> }> {
+    return this.post('/api/v1/auth/lookup-subdomain', { email });
+  }
+
+  // ================================
+  // 💬 Chat Methods (Legacy - kept for compatibility)
+  // ================================
+
+  async searchChatSessions(query: string, page = 1, pageSize = 20): Promise<any> {
+    return this.get(`/api/v1/chat/search?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}`);
+  }
+
+  async getChatSuggestions(query: string): Promise<any> {
+    return this.post('/api/v1/chat/suggestions', { query });
+  }
+
+  async getChatStats(): Promise<any> {
+    return this.get('/api/v1/chat/stats');
+  }
+
+  async summarizeChatSession(sessionId: string): Promise<any> {
+    return this.post(`/api/v1/chat/sessions/${sessionId}/summarize`);
+  }
+
+  async deactivateChatSession(sessionId: string): Promise<any> {
+    return this.put(`/api/v1/chat/sessions/${sessionId}/deactivate`);
+  }
+
+  async getDocumentChatSessions(documentId: string): Promise<any> {
+    return this.get(`/api/v1/chat/documents/${documentId}/sessions`);
+  }
+
+  async refreshToken(): Promise<boolean> {
     try {
       if (typeof window === 'undefined') return false;
       
@@ -182,19 +276,28 @@ class ArchivusAPIClient {
 
       const response = await this.post<LoginResponse>('/api/v1/auth/refresh', {
         refresh_token: refreshToken,
+      }, {
+        requestConfig: {
+          skipAuth: true,
+          silent: true,
+          retry: false, // Don't retry refresh requests
+        }
       });
 
-      const { token, refresh_token } = response;
-      this.setToken(token);
+      const { token, refresh_token, expires_in } = response;
+      
+      // Update stored tokens
       localStorage.setItem('access_token', token);
       localStorage.setItem('refresh_token', refresh_token);
       
+      // Set token with expiration
+      const expiresIn = expires_in || 3600;
+      this.setToken(token, expiresIn);
+      
       return true;
     } catch (error) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-      }
+      console.error('Token refresh failed:', error);
+      this.clearAuth();
       return false;
     }
   }
@@ -204,7 +307,7 @@ class ArchivusAPIClient {
   // 📄 Document Methods
   // ================================
 
-  async getDocuments(params: DocumentListParams = {}): Promise<PaginatedResponse<Document>> {
+  async getDocuments(params: DocumentListParams & { include?: string } = {}): Promise<PaginatedResponse<Document>> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -232,14 +335,16 @@ class ArchivusAPIClient {
     return this.get<any>(`/api/v1/documents/enhanced?${searchParams.toString()}`);
   }
 
-  async getDocument(id: string): Promise<Document> {
-    return this.get<Document>(`/api/v1/documents/${id}`);
+  async getDocument(id: string, include?: string): Promise<Document> {
+    const url = include ? `/api/v1/documents/${id}?include=${include}` : `/api/v1/documents/${id}`;
+    return this.get<Document>(url);
   }
 
   async uploadDocument(
     file: File, 
     options: UploadOptions = {},
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    signal?: AbortSignal
   ): Promise<Document> {
     const formData = new FormData();
     formData.append('file', file);
@@ -258,9 +363,13 @@ class ArchivusAPIClient {
     const response = await this.client.post<Document>('/api/v1/documents/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
       },
-      timeout: 300000, // 5 minutes for large files
+      timeout: DEFAULT_TIMEOUTS.upload,
+      signal,
+      requestConfig: {
+        timeout: DEFAULT_TIMEOUTS.upload,
+        signal,
+      },
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const progress = (progressEvent.loaded / progressEvent.total) * 100;
@@ -276,11 +385,14 @@ class ArchivusAPIClient {
     await this.delete(`/api/v1/documents/${id}`);
   }
 
-  async downloadDocument(id: string): Promise<Blob> {
+  async downloadDocument(id: string, signal?: AbortSignal): Promise<Blob> {
     const response = await this.client.get(`/api/v1/documents/${id}/download`, {
       responseType: 'blob',
-      headers: {
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      timeout: DEFAULT_TIMEOUTS.download,
+      signal,
+      requestConfig: {
+        timeout: DEFAULT_TIMEOUTS.download,
+        signal,
       },
     });
     return response.data;
@@ -324,6 +436,14 @@ class ArchivusAPIClient {
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.delete(`/api/v1/chat/sessions/${sessionId}`);
+  }
+
+  async pinChatSession(sessionId: string): Promise<any> {
+    return this.put(`/api/v1/chat/sessions/${sessionId}/pin`);
+  }
+
+  async unpinChatSession(sessionId: string): Promise<any> {
+    return this.put(`/api/v1/chat/sessions/${sessionId}/unpin`);
   }
 
   // ================================
@@ -382,20 +502,30 @@ class ArchivusAPIClient {
   // 🔧 Utility Methods
   // ================================
 
-  initializeFromStorage() {
+  async initializeFromStorage() {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('access_token');
       if (token) {
         this.setToken(token);
+        
+        // Try to validate the token and get expiration info
+        try {
+          await this.validateToken();
+        } catch (error) {
+          console.error('Token validation failed:', error);
+          this.clearAuth();
+        }
       }
     }
   }
 
-  getStoredToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('access_token');
-    }
-    return null;
+  // Create a cancellable request
+  createCancellableRequest() {
+    const controller = new AbortController();
+    return {
+      signal: controller.signal,
+      cancel: () => controller.abort(),
+    };
   }
 }
 

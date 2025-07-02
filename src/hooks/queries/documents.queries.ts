@@ -28,12 +28,29 @@ export const documentKeys = {
 // 📄 Document Queries
 // ================================
 
-export function useDocuments(params: DocumentListParams = {}) {
-  return useQuery({
+export function useDocuments(params: DocumentListParams = {}, options?: { enablePolling?: boolean }) {
+  const queryResult = useQuery({
     queryKey: documentKeys.list(params),
-    queryFn: () => apiClient.getDocuments(params),
+    queryFn: () => apiClient.getDocuments({ ...params, include: 'tags,categories,folder' }),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  // Check if any documents are being processed
+  const hasProcessingDocuments = queryResult.data?.items?.some(
+    doc => doc.ai_processing_status === 'processing' || doc.ai_processing_status === 'pending'
+  );
+
+  // Return query with polling if needed
+  if (options?.enablePolling !== false && hasProcessingDocuments) {
+    return useQuery({
+      queryKey: documentKeys.list(params),
+      queryFn: () => apiClient.getDocuments({ ...params, include: 'tags,categories,folder' }),
+      staleTime: 5 * 60 * 1000,
+      refetchInterval: 3000, // Poll every 3 seconds
+    });
+  }
+
+  return queryResult;
 }
 
 export function useEnhancedDocuments(params: DocumentListParams = {}) {
@@ -44,13 +61,30 @@ export function useEnhancedDocuments(params: DocumentListParams = {}) {
   });
 }
 
-export function useDocument(id: string) {
-  return useQuery({
+export function useDocument(id: string, options?: { enablePolling?: boolean }) {
+  const queryResult = useQuery({
     queryKey: documentKeys.detail(id),
-    queryFn: () => apiClient.getDocument(id),
+    queryFn: () => apiClient.getDocument(id, 'tags,categories,folder'),
     enabled: !!id,
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
+
+  // Check if document is being processed
+  const isProcessing = queryResult.data?.ai_processing_status === 'processing' || 
+                      queryResult.data?.ai_processing_status === 'pending';
+
+  // Return query with polling if needed
+  if (options?.enablePolling !== false && isProcessing) {
+    return useQuery({
+      queryKey: documentKeys.detail(id),
+      queryFn: () => apiClient.getDocument(id, 'tags,categories,folder'),
+      enabled: !!id,
+      staleTime: 10 * 60 * 1000,
+      refetchInterval: 3000, // Poll every 3 seconds
+    });
+  }
+
+  return queryResult;
 }
 
 export function useDocumentAIResults(id: string) {
