@@ -36,11 +36,7 @@ export default function UploadPage() {
       </div>
 
       <div className="max-w-3xl">
-        <DocumentUploader
-          onUploadComplete={handleUploadComplete}
-          maxFiles={10}
-          maxSize={50 * 1024 * 1024} // 50MB
-        />
+        <DocumentUploader />
       </div>
 
       <div className="max-w-3xl">

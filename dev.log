@@ -1,0 +1,20 @@
+
+> archivus-frontend@0.1.0 dev
+> next dev --turbopack
+
+   ▲ Next.js 15.3.4 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://172.24.38.125:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ○ Compiling middleware ...
+ ✓ Compiled middleware in 774ms
+ ✓ Ready in 17.2s
+ ○ Compiling / ...
+ ✓ Compiled / in 15.3s
+ GET / 200 in 16762ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 3.3s
+ GET /dashboard 200 in 3723ms
+[?25h

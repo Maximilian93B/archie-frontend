@@ -205,7 +205,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.clearToken();
       
       // Clear subscription state and cookies
-      const subscriptionStore = useSubscriptionStoreV2.getState();
+      const subscriptionStore = useSubscriptionStore.getState();
       subscriptionStore.clearCache();
       Cookies.remove('has_subscription');
       Cookies.remove('is_trialing');
