@@ -14,7 +14,8 @@ import { cn } from '@/lib/utils'
 import { formatBytes } from '@/lib/utils'
 import { apiClient } from '@/lib/api/client'
 import { toast } from '@/hooks/use-toast'
-import type { UploadOptions } from '@/types'
+import { UploadSuccessDialog } from './upload-success-dialog'
+import type { UploadOptions, Document } from '@/types'
 
 interface FileWithProgress extends File {
   id: string
@@ -32,33 +33,77 @@ interface DocumentUploaderWithFoldersProps {
 }
 
 const DEFAULT_ACCEPTED_TYPES = {
+  // Documents
   'application/pdf': ['.pdf'],
   'application/msword': ['.doc'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.oasis.opendocument.text': ['.odt'],
+  'application/rtf': ['.rtf'],
+  'text/rtf': ['.rtf'],
+  
+  // Text & Data
   'text/plain': ['.txt'],
   'text/markdown': ['.md'],
   'text/csv': ['.csv'],
+  'application/json': ['.json'],
+  'application/xml': ['.xml'],
+  'text/xml': ['.xml'],
+  
+  // Spreadsheets
   'application/vnd.ms-excel': ['.xls'],
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
+  
+  // Presentations
+  'application/vnd.ms-powerpoint': ['.ppt'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+  'application/vnd.oasis.opendocument.presentation': ['.odp'],
+  
+  // Images
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/gif': ['.gif'],
   'image/webp': ['.webp'],
+  'image/bmp': ['.bmp'],
+  'image/svg+xml': ['.svg'],
+  'image/tiff': ['.tiff', '.tif'],
 }
 
 const FILE_TYPE_LABELS: Record<string, string> = {
+  // Documents
   'application/pdf': 'PDF',
   'application/msword': 'Word',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
+  'application/vnd.oasis.opendocument.text': 'ODT',
+  'application/rtf': 'RTF',
+  'text/rtf': 'RTF',
+  
+  // Text & Data
   'text/plain': 'Text',
   'text/markdown': 'Markdown',
   'text/csv': 'CSV',
+  'application/json': 'JSON',
+  'application/xml': 'XML',
+  'text/xml': 'XML',
+  
+  // Spreadsheets
   'application/vnd.ms-excel': 'Excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
+  'application/vnd.oasis.opendocument.spreadsheet': 'ODS',
+  
+  // Presentations
+  'application/vnd.ms-powerpoint': 'PowerPoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint',
+  'application/vnd.oasis.opendocument.presentation': 'ODP',
+  
+  // Images
   'image/png': 'PNG',
   'image/jpeg': 'JPEG',
   'image/gif': 'GIF',
   'image/webp': 'WebP',
+  'image/bmp': 'BMP',
+  'image/svg+xml': 'SVG',
+  'image/tiff': 'TIFF',
 }
 
 export function DocumentUploaderWithFolders({
@@ -74,6 +119,8 @@ export function DocumentUploaderWithFolders({
   const [enableAI, setEnableAI] = useState(true)
   const [enableOCR, setEnableOCR] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+  const [uploadedDocument, setUploadedDocument] = useState<Document | null>(null)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -137,6 +184,12 @@ export function DocumentUploaderWithFolders({
         title: 'Upload successful',
         description: `${file.name} has been uploaded`,
       })
+
+      // Show processing dialog for single file uploads
+      if (files.length === 1) {
+        setUploadedDocument(response)
+        setShowSuccessDialog(true)
+      }
 
       if (onUploadComplete) {
         onUploadComplete(response.id)
@@ -371,6 +424,20 @@ export function DocumentUploaderWithFolders({
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Upload Success Dialog */}
+      {uploadedDocument && (
+        <UploadSuccessDialog
+          document={uploadedDocument}
+          open={showSuccessDialog}
+          onOpenChange={setShowSuccessDialog}
+          onViewDocument={() => {
+            if (onUploadComplete) {
+              onUploadComplete(uploadedDocument.id)
+            }
+          }}
+        />
       )}
     </div>
   )

@@ -5,6 +5,7 @@ import { ChatMessage, useChatStore } from '@/store/chat-store'
 import { cn } from '@/lib/utils'
 import { isSameDay } from 'date-fns'
 import { Loader2 } from 'lucide-react'
+import { useMessagePagination, useInfiniteScroll } from '@/hooks/use-message-pagination'
 
 interface VirtualizedMessageListProps {
   sessionId: string
@@ -32,6 +33,18 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const parentRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = React.useState(true)
   const prevMessageCount = useRef(messages.length)
+  
+  // Message pagination
+  const { isLoadingMore, hasMore, loadMore, canLoadMore } = useMessagePagination({ 
+    sessionId,
+    pageSize: 50 
+  })
+  
+  // Infinite scroll for loading more messages
+  useInfiniteScroll(parentRef, loadMore, {
+    threshold: 200,
+    enabled: canLoadMore
+  })
 
   // Build items array with date separators
   const items = React.useMemo(() => {
@@ -69,19 +82,50 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       const item = items[index]
       if (item.type === 'separator') return 56 // Date separator height
       
-      // Estimate message height based on content length
+      // Estimate message height based on content length and role
       const msg = item.data as ChatMessage
-      const baseHeight = 80 // Base height with padding
+      const isUser = msg.role === 'user'
+      const baseHeight = isUser ? 60 : 80 // User messages are typically shorter
       const charPerLine = 60
       const linesEstimate = Math.ceil(msg.content.length / charPerLine)
-      return baseHeight + (linesEstimate * 20) // 20px per line
+      
+      // Add extra height for code blocks or lists
+      const hasCodeBlocks = msg.content.includes('```')
+      const hasLists = msg.content.includes('\n-') || msg.content.includes('\n*')
+      const extraHeight = hasCodeBlocks ? 40 : hasLists ? 20 : 0
+      
+      return baseHeight + (linesEstimate * 20) + extraHeight // 20px per line
     }, [items]),
     overscan: 5, // Render 5 items outside viewport
     getItemKey: useCallback((index: number) => items[index].id, [items])
   })
 
+  // Handle scroll position when loading older messages
+  const scrollHeightBeforeLoad = useRef<number>(0)
+  const scrollTopBeforeLoad = useRef<number>(0)
+  
+  // Save scroll position before loading more
+  useEffect(() => {
+    if (isLoadingMore && parentRef.current) {
+      scrollHeightBeforeLoad.current = parentRef.current.scrollHeight
+      scrollTopBeforeLoad.current = parentRef.current.scrollTop
+    }
+  }, [isLoadingMore])
+  
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
+    if (!parentRef.current) return
+    
+    // If we just loaded older messages, maintain scroll position
+    if (scrollHeightBeforeLoad.current > 0 && !isLoadingMore) {
+      const scrollHeightDiff = parentRef.current.scrollHeight - scrollHeightBeforeLoad.current
+      parentRef.current.scrollTop = scrollTopBeforeLoad.current + scrollHeightDiff
+      scrollHeightBeforeLoad.current = 0
+      scrollTopBeforeLoad.current = 0
+      return
+    }
+    
+    // Normal auto-scroll for new messages
     if (messages.length > prevMessageCount.current && autoScroll) {
       // Scroll to bottom smoothly
       setTimeout(() => {
@@ -92,7 +136,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }, 100)
     }
     prevMessageCount.current = messages.length
-  }, [messages.length, autoScroll])
+  }, [messages.length, autoScroll, isLoadingMore])
 
   // Detect if user scrolls up (disable auto-scroll)
   const handleScroll = useCallback(() => {
@@ -127,6 +171,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     )
   }
 
+  // Get total message count
+  const totalMessages = messages.length // Will be updated when we have proper session data
+  const showingMessages = messages.length
+  
   return (
     <div
       ref={parentRef}
@@ -136,6 +184,28 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       )}
       onScroll={handleScroll}
     >
+      {/* Loading more indicator at the top */}
+      {isLoadingMore && (
+        <div className="flex items-center justify-center py-4 sticky top-0 bg-white/90 backdrop-blur-sm z-10">
+          <Loader2 className="h-4 w-4 animate-spin text-gray-400 mr-2" />
+          <span className="text-sm text-gray-500">Loading older messages...</span>
+        </div>
+      )}
+      
+      {/* Message count indicator */}
+      {hasMore && showingMessages < totalMessages && !isLoadingMore && (
+        <div className="text-center py-3 text-sm text-gray-500 bg-gray-50 sticky top-0 z-10">
+          Showing {showingMessages} of {totalMessages} messages
+          <button 
+            onClick={loadMore}
+            className="ml-2 text-blue-600 hover:text-blue-700 font-medium"
+            disabled={!canLoadMore}
+          >
+            Load more
+          </button>
+        </div>
+      )}
+      
       {/* Virtual list container */}
       <div
         style={{

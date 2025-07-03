@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { ChatSession, useChatStore } from '@/store/chat-store'
+import { ChatSession } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { useUpdateSessionName, useDeleteChatSession, usePinSession } from '@/hooks/queries/chat.queries'
 import { Button } from '@/components/ui/button'
 import { 
@@ -48,11 +49,7 @@ export function SessionListItem({
   showPin = true,
   className 
 }: SessionListItemProps) {
-  const {
-    currentSessionId,
-    setCurrentSession,
-    exportSession
-  } = useChatStore()
+  const { currentSessionId, setCurrentSession, exportSession } = useChatStoreSafe()
   
   // React Query mutations
   const updateSessionName = useUpdateSessionName()

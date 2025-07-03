@@ -1,8 +1,9 @@
 import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware'
+import { shallow } from 'zustand/shallow'
 import type { Document } from '@/types'
 
-interface DocumentState {
+export interface DocumentState {
   // Selected documents for bulk operations
   selectedDocuments: string[]
   
@@ -39,9 +40,10 @@ interface DocumentState {
 }
 
 export const useDocumentStore = create<DocumentState>()(
-  devtools(
-    persist(
-      (set) => ({
+  subscribeWithSelector(
+    devtools(
+      persist(
+        (set) => ({
         // Initial state
         selectedDocuments: [],
         currentDocument: null,
@@ -89,15 +91,16 @@ export const useDocumentStore = create<DocumentState>()(
           
         clearFilters: () =>
           set({ filters: {} }),
-      }),
-      {
-        name: 'document-preferences',
-        partialize: (state) => ({
-          viewMode: state.viewMode,
-          sortBy: state.sortBy,
-          sortOrder: state.sortOrder,
         }),
-      }
+        {
+          name: 'document-preferences',
+          partialize: (state) => ({
+            viewMode: state.viewMode,
+            sortBy: state.sortBy,
+            sortOrder: state.sortOrder,
+          }),
+        }
+      )
     )
   )
 )
@@ -109,9 +112,13 @@ export const useSelectedDocumentCount = () =>
 export const useIsDocumentSelected = (documentId: string) =>
   useDocumentStore((state) => state.selectedDocuments.includes(documentId))
 
+// Use shallow comparison for object selectors to ensure stable references
 export const useDocumentViewPreferences = () =>
-  useDocumentStore((state) => ({
-    viewMode: state.viewMode,
-    sortBy: state.sortBy,
-    sortOrder: state.sortOrder,
-  }))
+  useDocumentStore(
+    (state) => ({
+      viewMode: state.viewMode,
+      sortBy: state.sortBy,
+      sortOrder: state.sortOrder,
+    }),
+    shallow
+  )

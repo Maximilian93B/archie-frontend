@@ -13,13 +13,13 @@ import { apiClient } from '@/lib/api/client'
 import { toast } from '@/hooks/use-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DocumentListParams } from '@/types'
-import { useDocumentStore, useDocumentViewPreferences } from '@/store/document-store'
+import { useDocumentStoreSafe, useDocumentViewPreferencesSafe } from '@/hooks/use-document-store-safe'
 
 export default function DocumentsPage() {
   const searchParams = useSearchParams() // eslint-disable-line @typescript-eslint/no-unused-vars
   const queryClient = useQueryClient()
-  const { viewMode, sortBy, sortOrder } = useDocumentViewPreferences()
-  const { setViewMode } = useDocumentStore()
+  const { viewMode, sortBy, sortOrder } = useDocumentViewPreferencesSafe()
+  const { setViewMode } = useDocumentStoreSafe()
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const [filterOpen, setFilterOpen] = useState(false)

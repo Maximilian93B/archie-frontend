@@ -2,7 +2,7 @@
 
 import { Download, Trash2, FolderInput, Tag, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useDocumentStore } from '@/store/document-store'
+import { useDocumentStoreSafe } from '@/hooks/use-document-store-safe'
 import { apiClient } from '@/lib/api/client'
 import { toast } from '@/hooks/use-toast'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -13,8 +13,8 @@ interface BulkOperationsProps {
 
 export function BulkOperations({ onComplete }: BulkOperationsProps) {
   const queryClient = useQueryClient()
-  const { selectedDocumentIds, clearSelection } = useDocumentStore()
-  const selectedCount = selectedDocumentIds.length
+  const { selectedDocuments, clearSelection } = useDocumentStoreSafe()
+  const selectedCount = selectedDocuments.length
 
   // Bulk delete mutation
   const bulkDeleteMutation = useMutation({
@@ -53,7 +53,7 @@ export function BulkOperations({ onComplete }: BulkOperationsProps) {
   const handleBulkDownload = async () => {
     try {
       // Download documents one by one
-      for (const docId of selectedDocumentIds) {
+      for (const docId of selectedDocuments) {
         try {
           const blob = await apiClient.downloadDocument(docId)
           const url = window.URL.createObjectURL(blob)
@@ -84,7 +84,7 @@ export function BulkOperations({ onComplete }: BulkOperationsProps) {
 
   const handleBulkDelete = () => {
     if (window.confirm(`Are you sure you want to delete ${selectedCount} documents? This action cannot be undone.`)) {
-      bulkDeleteMutation.mutate(selectedDocumentIds)
+      bulkDeleteMutation.mutate(selectedDocuments)
     }
   }
 

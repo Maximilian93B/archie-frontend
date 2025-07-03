@@ -12,14 +12,14 @@ import {
 } from '@/components/ui/dialog'
 import { DocumentPicker } from '@/components/documents/document-picker'
 import { useCreateChatSession } from '@/hooks/queries/chat.queries'
-import { useChatStore } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { Plus, FileText, MessageSquare } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 export function SessionQuickActions() {
   const [showDocumentPicker, setShowDocumentPicker] = useState(false)
   const [showQuickStart, setShowQuickStart] = useState(false)
-  const { setCurrentSession } = useChatStore()
+  const { setCurrentSession } = useChatStoreSafe()
   const createSession = useCreateChatSession()
   
   const handleNewChatWithDocument = async (documentId: string) => {

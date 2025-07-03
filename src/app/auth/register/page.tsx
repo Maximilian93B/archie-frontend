@@ -144,17 +144,25 @@ export default function RegisterPage() {
   }
 
   const handleOAuthSignup = (provider: 'google' | 'github') => {
-    // Store registration type and company name for OAuth callback
-    sessionStorage.setItem('oauth_registration_type', registrationType)
-    if (registrationType === 'organization' && formData.company) {
-      sessionStorage.setItem('oauth_company_name', formData.company)
+    // Store registration type for OAuth callback
+    if (registrationType) {
+      sessionStorage.setItem('oauth_registration_type', registrationType)
+    }
+    
+    // Get company name from the appropriate form
+    let companyName = '';
+    if (registrationType === 'organization') {
+      companyName = organizationForm.getValues('company')
+      if (companyName) {
+        sessionStorage.setItem('oauth_company_name', companyName)
+      }
     }
     
     // Redirect to backend OAuth endpoint with registration type
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
     const params = new URLSearchParams({
-      type: registrationType,
-      ...(registrationType === 'organization' && formData.company ? { company: formData.company } : {})
+      type: registrationType || 'individual',
+      ...(registrationType === 'organization' && companyName ? { company: companyName } : {})
     })
     
     window.location.href = `${apiUrl}/api/v1/auth/oauth/${provider}?${params}`

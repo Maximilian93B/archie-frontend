@@ -17,7 +17,8 @@
     "test:integration": "node scripts/test-frontend-integration.js",
     "test:folders": "vitest run src/components/folders",
     "test:tags": "vitest run src/components/tags",
-    "test:phase1": "vitest run src/components/folders src/components/tags src/store/__tests__/folder-store.test.ts src/store/__tests__/tag-store.test.ts"
+    "test:phase1": "vitest run src/components/folders src/components/tags src/store/__tests__/folder-store.test.ts src/store/__tests__/tag-store.test.ts",
+    "test:chat": "node scripts/test-chat.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

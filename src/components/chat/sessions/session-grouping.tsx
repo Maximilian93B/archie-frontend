@@ -1,6 +1,6 @@
 'use client'
 
-import { useChatStore, selectSessionsByDateGroup, selectIsGroupExpanded, selectFilteredSessions } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { SessionListItem } from './session-list-item'
 import { Button } from '@/components/ui/button'
 import { 
@@ -41,12 +41,7 @@ const DATE_GROUPS = [
 ] as const
 
 export function SessionGrouping() {
-  const { 
-    toggleGroup, 
-    searchQuery, 
-    pinnedSessionIds,
-    sessionGroups 
-  } = useChatStore()
+  const { searchQuery } = useChatStoreSafe()
   
   // If searching, show filtered results
   if (searchQuery) {
@@ -64,10 +59,13 @@ export function SessionGrouping() {
 }
 
 function SearchResults() {
-  const filteredSessions = useChatStore(selectFilteredSessions)
-  const { pinnedSessionIds } = useChatStore()
+  const { sessionsList, filteredSessions, searchQuery, pinnedSessionIds } = useChatStoreSafe()
   
-  if (filteredSessions.length === 0) {
+  const filteredSessionsList = searchQuery 
+    ? sessionsList.filter(s => filteredSessions.includes(s.id))
+    : sessionsList
+  
+  if (filteredSessionsList.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
         <FileText className="h-8 w-8 text-gray-300 mb-2" />
@@ -81,7 +79,7 @@ function SearchResults() {
       <div className="text-xs font-medium text-gray-600 px-2 mb-2">
         Search Results
       </div>
-      {filteredSessions.map((session) => (
+      {filteredSessionsList.map((session) => (
         <SessionListItem
           key={session.id}
           session={session}
@@ -98,9 +96,11 @@ interface DateGroupProps {
 }
 
 function DateGroup({ group }: DateGroupProps) {
-  const sessions = useChatStore(selectSessionsByDateGroup(group.key))
-  const isExpanded = useChatStore(selectIsGroupExpanded(group.key))
-  const { toggleGroup, pinnedSessionIds } = useChatStore()
+  const { sessionsList, sessionGroups, expandedGroups, toggleGroup, pinnedSessionIds } = useChatStoreSafe()
+  
+  const sessionIds = sessionGroups.byDate[group.key] || []
+  const sessions = sessionsList.filter(s => sessionIds.includes(s.id))
+  const isExpanded = expandedGroups.has(group.key)
   
   // Filter out pinned sessions (they're shown in pinned section)
   const unpinnedSessions = sessions.filter(session => 

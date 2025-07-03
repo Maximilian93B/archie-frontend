@@ -29,7 +29,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { formatRelativeTime, formatBytes, cn } from '@/lib/utils'
 import type { Document } from '@/types'
-import { useDocumentStore } from '@/store/document-store'
+import { useDocumentStoreSafe, useIsDocumentSelectedSafe } from '@/hooks/use-document-store-safe'
 
 interface DocumentListInboxProps {
   documents: Document[]
@@ -67,7 +67,7 @@ export function DocumentListInbox({
   onDownload,
   onStar,
 }: DocumentListInboxProps) {
-  const { selectedDocuments, toggleDocumentSelection, selectAllDocuments, clearSelection } = useDocumentStore()
+  const { selectedDocuments, toggleDocumentSelection, selectAllDocuments, clearSelection } = useDocumentStoreSafe()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   const handleSelectAll = (checked: boolean) => {

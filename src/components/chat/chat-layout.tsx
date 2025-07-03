@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ChatSessionSidebar } from './sessions/chat-session-sidebar'
 import { ChatInterface } from './chat-interface'
-import { useChatStore } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { useChatSessions } from '@/hooks/queries/chat.queries'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,16 +21,18 @@ export function ChatLayout({
   defaultDocumentId,
   defaultDocumentTitle 
 }: ChatLayoutProps) {
+  const store = useChatStoreSafe()
+  const { data: sessions, isLoading } = useChatSessions()
+  const [isMobile, setIsMobile] = useState(false)
+  
+  // Now we can directly destructure without worrying about undefined
   const { 
     currentSessionId, 
-    currentSession,
+    currentSession, 
     sessionSidebarOpen,
     setCurrentSession,
     addSession
-  } = useChatStore()
-  
-  const { data: sessions, isLoading } = useChatSessions()
-  const [isMobile, setIsMobile] = useState(false)
+  } = store
   
   // Check if mobile
   useEffect(() => {
@@ -102,7 +104,7 @@ function ChatWelcomeScreen({
   defaultDocumentId, 
   defaultDocumentTitle 
 }: ChatWelcomeScreenProps) {
-  const { sessionsList, toggleSessionSidebar, sessionSidebarOpen } = useChatStore()
+  const { sessionsList, toggleSessionSidebar, sessionSidebarOpen } = useChatStoreSafe()
   
   return (
     <div className="flex-1 flex items-center justify-center p-8">

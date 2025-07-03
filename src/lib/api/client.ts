@@ -119,7 +119,7 @@ class ArchivusAPIClient {
   }
 
   // Generic request methods with enhanced config
-  private async get<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+  async get<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
     const response = await this.client.get<T>(url, this.mergeConfig(config));
     return response.data;
   }
@@ -129,12 +129,12 @@ class ArchivusAPIClient {
     return response.data;
   }
 
-  private async put<T>(url: string, data?: any, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+  async put<T>(url: string, data?: any, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
     const response = await this.client.put<T>(url, data, this.mergeConfig(config));
     return response.data;
   }
 
-  private async delete<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
+  async delete<T>(url: string, config?: AxiosRequestConfig & { requestConfig?: RequestConfig }): Promise<T> {
     const response = await this.client.delete<T>(url, this.mergeConfig(config));
     return response.data;
   }
@@ -155,17 +155,13 @@ class ArchivusAPIClient {
   // ================================
 
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    // Extract subdomain from credentials if provided
-    const { subdomain, ...loginData } = credentials;
-    
-    // If subdomain is provided, add it as a header
-    const headers: any = {};
-    if (subdomain) {
-      headers['X-Tenant-Subdomain'] = subdomain;
+    // Store subdomain in localStorage before login if provided
+    if (credentials.subdomain) {
+      localStorage.setItem('tenant_subdomain', credentials.subdomain);
     }
     
-    const response = await this.post<LoginResponse>('/api/v1/auth/login', loginData, {
-      headers,
+    // Login with credentials
+    const response = await this.post<LoginResponse>('/api/v1/auth/login', credentials, {
       requestConfig: {
         timeout: DEFAULT_TIMEOUTS.auth,
         skipAuth: true,
@@ -236,7 +232,11 @@ class ArchivusAPIClient {
   }
 
   async lookupSubdomain(email: string): Promise<{ subdomains: Array<{ subdomain: string; tenant_name: string }> }> {
-    return this.post('/api/v1/auth/lookup-subdomain', { email });
+    return this.post('/api/v1/auth/lookup-subdomain', { email }, {
+      requestConfig: {
+        skipAuth: true,
+      }
+    });
   }
 
   // ================================
@@ -496,6 +496,26 @@ class ArchivusAPIClient {
 
   async getStorageReport(): Promise<any> {
     return this.get<any>('/api/v1/analytics/storage');
+  }
+
+  // ================================
+  // 💳 Subscription Methods
+  // ================================
+
+  async getSubscriptionStatus(): Promise<any> {
+    return this.get('/api/v1/subscription/status');
+  }
+
+  async getSubscriptionUsage(): Promise<any> {
+    return this.get('/api/v1/subscription/usage');
+  }
+
+  async createCheckoutSession(data: any): Promise<any> {
+    return this.post('/api/v1/subscription/checkout', data);
+  }
+
+  async createPortalSession(data?: any): Promise<any> {
+    return this.post('/api/v1/subscription/portal', data || {});
   }
 
   // ================================

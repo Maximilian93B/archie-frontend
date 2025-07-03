@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useChatSession, useAskQuestion, useOptimisticMessage } from '@/hooks/queries/chat.queries'
-import { useChatStore } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { ChatInterface } from './chat-interface'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -31,7 +31,7 @@ export function ChatWithTanstack({
   const { addMessage, removeMessage } = useOptimisticMessage()
   
   // Zustand store for client state (drafts, UI state)
-  const { drafts, saveDraft, clearDraft } = useChatStore()
+  const { drafts, setDraft, clearDraft } = useChatStoreSafe()
   
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || askQuestion.isPending) return

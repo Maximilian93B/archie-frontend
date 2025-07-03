@@ -25,7 +25,7 @@ import { ProcessingStatusBadge } from '@/components/documents/processing-status-
 import { formatDate, formatBytes, getDocumentTypeColor } from '@/lib/utils'
 import type { Document } from '@/types'
 import { cn } from '@/lib/utils'
-import { useDocumentStore, useIsDocumentSelected } from '@/store/document-store'
+import { useDocumentStoreSafe, useIsDocumentSelectedSafe } from '@/hooks/use-document-store-safe'
 
 interface DocumentListProps {
   documents: Document[]
@@ -42,7 +42,7 @@ export function DocumentList({
   onDelete,
   onDownload,
 }: DocumentListProps) {
-  const { toggleDocumentSelection } = useDocumentStore()
+  const { toggleDocumentSelection } = useDocumentStoreSafe()
 
   const handleDelete = async (documentId: string) => {
     if (onDelete) {
@@ -136,8 +136,8 @@ function DocumentListItem({
   onDelete: (id: string) => void
   onDownload: (id: string) => void
 }) {
-  const isSelected = useIsDocumentSelected(document.id)
-  const { toggleDocumentSelection } = useDocumentStore()
+  const isSelected = useIsDocumentSelectedSafe(document.id)
+  const { toggleDocumentSelection } = useDocumentStoreSafe()
 
   return (
     <Card
@@ -179,8 +179,10 @@ function DocumentListItem({
                   {formatDate(document.created_at)}
                 </span>
                 <ProcessingStatusBadge 
-                  status={document.ai_processing_status} 
+                  status={document.status} 
                   aiProcessed={document.ai_processed}
+                  aiProcessingStatus={document.ai_processing_status}
+                  embeddingStatus={document.embedding_status}
                 />
               </div>
             </div>
@@ -237,7 +239,7 @@ function DocumentGridItem({
   onDelete: (id: string) => void
   onDownload: (id: string) => void
 }) {
-  const isSelected = useIsDocumentSelected(document.id)
+  const isSelected = useIsDocumentSelectedSafe(document.id)
 
   return (
     <Card

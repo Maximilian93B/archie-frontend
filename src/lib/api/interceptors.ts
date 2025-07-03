@@ -39,15 +39,12 @@ export class InterceptorManager {
           }
         }
 
-        // Add tenant header (skip for auth endpoints)
-        const isAuthEndpoint = config.url?.includes('/auth/') || config.url?.includes('/auth');
-        if (!isAuthEndpoint && !requestConfig?.skipAuth) {
-          const tenantSubdomain = typeof window !== 'undefined' 
-            ? localStorage.getItem('tenant_subdomain') 
-            : null;
-          if (tenantSubdomain) {
-            config.headers['X-Tenant-Subdomain'] = tenantSubdomain;
-          }
+        // Add tenant header when available
+        const tenantSubdomain = typeof window !== 'undefined' 
+          ? localStorage.getItem('tenant_subdomain') 
+          : null;
+        if (tenantSubdomain) {
+          config.headers['X-Tenant-Subdomain'] = tenantSubdomain;
         }
 
         // Add CSRF token for state-changing requests
@@ -61,8 +58,8 @@ export class InterceptorManager {
           }
         }
 
-        // Add request ID for tracking
-        config.headers['X-Request-ID'] = this.generateRequestId();
+        // Note: Removed X-Request-ID header due to CORS restrictions
+        // If request tracking is needed, it should be added to backend's allowed headers
 
         // Log request in development
         if (process.env.NODE_ENV === 'development') {
@@ -183,7 +180,4 @@ export class InterceptorManager {
     return this.client.request(config);
   }
 
-  private generateRequestId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
 }

@@ -1,21 +1,22 @@
 'use client'
 
-import { useChatStore, selectPinnedSessions, selectIsGroupExpanded } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { SessionListItem } from './session-list-item'
 import { Button } from '@/components/ui/button'
 import { Pin, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function PinnedSessions() {
-  const pinnedSessions = useChatStore(selectPinnedSessions)
-  const isExpanded = useChatStore(selectIsGroupExpanded('pinned'))
-  const { toggleGroup, searchQuery } = useChatStore()
+  const { sessionsList, pinnedSessionIds, expandedGroups, toggleGroup, searchQuery } = useChatStoreSafe()
+  
+  const pinnedSessions = sessionsList.filter(s => pinnedSessionIds.has(s.id))
+  const isExpanded = expandedGroups.has('pinned')
   
   // Don't show pinned section during search
   if (searchQuery) return null
   
   // Don't show if no pinned sessions
-  if (pinnedSessions.length === 0) return null
+  if (!pinnedSessions || pinnedSessions.length === 0) return null
   
   return (
     <div className="mb-4">

@@ -50,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // Store tenant subdomain if available
           if (userData.tenant_subdomain || userData.company) {
             // Use tenant_subdomain if available, otherwise derive from company name
-            const subdomain = userData.tenant_subdomain || userData.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const subdomain = userData.tenant_subdomain || userData.company?.toLowerCase().replace(/[^a-z0-9]/g, '-');
             if (subdomain) {
               localStorage.setItem('tenant_subdomain', subdomain);
             }
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Store tenant subdomain
       if (response.user.tenant_subdomain || response.user.company) {
         // Use tenant_subdomain if available, otherwise derive from company name
-        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '-');
         if (subdomain) {
           localStorage.setItem('tenant_subdomain', subdomain);
         }
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (response.user.tenant_subdomain || response.user.company) {
         // Use tenant_subdomain if available, otherwise derive from company name
-        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const subdomain = response.user.tenant_subdomain || response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '-');
         if (subdomain) {
           localStorage.setItem('tenant_subdomain', subdomain);
         }
@@ -233,6 +233,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(userData);
     setToken(accessToken);
     apiClient.setToken(accessToken, expiresIn);
+    
+    // Store subdomain consistently
+    if (userData.tenant_subdomain || userData.company) {
+      const subdomain = userData.tenant_subdomain || 
+                       userData.company?.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      if (subdomain) {
+        localStorage.setItem('tenant_subdomain', subdomain);
+      }
+    }
+    
+    // Fetch subscription status after setting auth
+    try {
+      const subscriptionStore = useSubscriptionStore.getState();
+      await subscriptionStore.fetchStatus();
+      
+      // Set subscription cookies for middleware
+      const status = subscriptionStore.status;
+      if (status) {
+        const hasActiveSubscription = status.status === 'active' || status.status === 'trialing';
+        const isTrialing = status.trial === true;
+        Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
+        Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
+      }
+    } catch (subError) {
+      console.warn('Failed to fetch subscription status in setAuth:', subError);
+    }
   };
 
   const value: AuthContextType = {

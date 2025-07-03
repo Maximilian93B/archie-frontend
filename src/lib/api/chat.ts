@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { ChatSession, ChatMessage } from '@/store/chat-store'
+import { handleChatError, retryWithBackoff, ChatError, ChatErrorType } from '@/lib/chat-errors'
 
 // Types based on backend API endpoints
 export interface CreateSessionRequest {
@@ -89,6 +90,36 @@ export interface GenerateSuggestionsResponse {
 }
 
 /**
+ * Wrapper for chat API calls with error handling and retry logic
+ */
+async function withChatErrorHandling<T>(
+  operation: () => Promise<T>,
+  options?: {
+    showToast?: boolean
+    retryable?: boolean
+    operationName?: string
+  }
+): Promise<T> {
+  const { showToast = true, retryable = true, operationName = 'operation' } = options || {}
+  
+  try {
+    return await operation()
+  } catch (error) {
+    const chatError = handleChatError(error, { showToast })
+    
+    // Log operation for debugging
+    console.error(`Chat API ${operationName} failed:`, chatError)
+    
+    // Retry if applicable
+    if (retryable && chatError.retryable) {
+      return retryWithBackoff(operation, chatError)
+    }
+    
+    throw chatError
+  }
+}
+
+/**
  * Chat API client with session-based architecture
  * Integrates with the 11 chat endpoints from the backend
  */
@@ -97,8 +128,10 @@ export const chatAPI = {
    * Create a new chat session for a document
    */
   async createSession(request: CreateSessionRequest): Promise<CreateSessionResponse> {
-    const response = await apiClient.post('/chat/sessions', request)
-    return response
+    return withChatErrorHandling(
+      () => apiClient.post('/api/v1/chat/sessions', request),
+      { operationName: 'createSession' }
+    )
   },
 
   /**
@@ -109,55 +142,87 @@ export const chatAPI = {
     page_size?: number
     document_id?: string
   } = {}): Promise<SessionListResponse> {
-    const searchParams = new URLSearchParams()
-    
-    if (params.page) searchParams.append('page', String(params.page))
-    if (params.page_size) searchParams.append('page_size', String(params.page_size))
-    if (params.document_id) searchParams.append('document_id', params.document_id)
-    
-    const query = searchParams.toString()
-    const response = await apiClient.get(`/chat/sessions${query ? `?${query}` : ''}`)
-    return response
+    return withChatErrorHandling(
+      () => {
+        const searchParams = new URLSearchParams()
+        
+        if (params.page) searchParams.append('page', String(params.page))
+        if (params.page_size) searchParams.append('page_size', String(params.page_size))
+        if (params.document_id) searchParams.append('document_id', params.document_id)
+        
+        const query = searchParams.toString()
+        return apiClient.get(`/api/v1/chat/sessions${query ? `?${query}` : ''}`)
+      },
+      { operationName: 'getSessions' }
+    )
   },
 
   /**
-   * Get a specific chat session by ID
+   * Get a specific chat session by ID with optional pagination
    */
-  async getSession(sessionId: string): Promise<CreateSessionResponse> {
-    const response = await apiClient.get(`/chat/sessions/${sessionId}`)
-    return response
+  async getSession(sessionId: string, params?: {
+    page?: number
+    limit?: number
+    offset?: number
+  }): Promise<CreateSessionResponse> {
+    return withChatErrorHandling(
+      () => {
+        const searchParams = new URLSearchParams()
+        
+        if (params?.page) searchParams.append('page', String(params.page))
+        if (params?.limit) searchParams.append('limit', String(params.limit))
+        if (params?.offset) searchParams.append('offset', String(params.offset))
+        
+        const query = searchParams.toString()
+        return apiClient.get(`/api/v1/chat/sessions/${sessionId}${query ? `?${query}` : ''}`)
+      },
+      { operationName: 'getSession' }
+    )
   },
 
   /**
    * Update session name
    */
   async updateSessionName(sessionId: string, request: UpdateSessionNameRequest): Promise<CreateSessionResponse> {
-    const response = await apiClient.put(`/chat/sessions/${sessionId}/name`, request)
-    return response
+    return withChatErrorHandling(
+      () => apiClient.put(`/api/v1/chat/sessions/${sessionId}/name`, request),
+      { operationName: 'updateSessionName' }
+    )
   },
 
   /**
    * Delete a chat session
    */
   async deleteSession(sessionId: string): Promise<{ success: boolean }> {
-    const response = await apiClient.delete(`/chat/sessions/${sessionId}`)
-    return response
+    return withChatErrorHandling(
+      () => apiClient.delete(`/api/v1/chat/sessions/${sessionId}`),
+      { operationName: 'deleteSession' }
+    )
   },
 
   /**
    * Deactivate a chat session (soft delete)
    */
   async deactivateSession(sessionId: string): Promise<CreateSessionResponse> {
-    const response = await apiClient.put(`/chat/sessions/${sessionId}/deactivate`, {})
-    return response
+    return withChatErrorHandling(
+      () => apiClient.put(`/api/v1/chat/sessions/${sessionId}/deactivate`, {}),
+      { operationName: 'deactivateSession' }
+    )
   },
 
   /**
    * Ask a question in a chat session
+   * Special handling for rate limits and validation
    */
   async askQuestion(sessionId: string, request: AskQuestionRequest): Promise<AskQuestionResponse> {
-    const response = await apiClient.post(`/chat/sessions/${sessionId}/ask`, request)
-    return response
+    return withChatErrorHandling(
+      () => apiClient.post(`/api/v1/chat/sessions/${sessionId}/ask`, request),
+      { 
+        operationName: 'askQuestion',
+        showToast: true,
+        retryable: true  // Allow retry for network issues
+      }
+    )
   },
 
   /**
@@ -170,45 +235,60 @@ export const chatAPI = {
     message_count: number
     created_at: string
   }> {
-    const response = await apiClient.post(`/chat/sessions/${sessionId}/summarize`, {})
-    return response
+    return withChatErrorHandling(
+      () => apiClient.post(`/api/v1/chat/sessions/${sessionId}/summarize`, {}),
+      { operationName: 'summarizeSession' }
+    )
   },
 
   /**
    * Get all chat sessions for a specific document
    */
   async getDocumentSessions(documentId: string): Promise<CreateSessionResponse[]> {
-    const response = await apiClient.get(`/chat/documents/${documentId}/sessions`)
-    return response.sessions || response
+    return withChatErrorHandling(
+      async () => {
+        const response = await apiClient.get(`/api/v1/chat/documents/${documentId}/sessions`)
+        return response.sessions || response
+      },
+      { operationName: 'getDocumentSessions' }
+    )
   },
 
   /**
    * Search chat sessions
    */
   async searchSessions(params: SearchSessionsParams): Promise<SearchSessionsResponse> {
-    const searchParams = new URLSearchParams()
-    searchParams.append('q', params.q)
-    if (params.limit) searchParams.append('limit', String(params.limit))
-    if (params.document_id) searchParams.append('document_id', params.document_id)
-    
-    const response = await apiClient.get(`/chat/search?${searchParams.toString()}`)
-    return response
+    return withChatErrorHandling(
+      () => {
+        const searchParams = new URLSearchParams()
+        searchParams.append('q', params.q)
+        if (params.limit) searchParams.append('limit', String(params.limit))
+        if (params.document_id) searchParams.append('document_id', params.document_id)
+        
+        return apiClient.get(`/api/v1/chat/search?${searchParams.toString()}`)
+      },
+      { operationName: 'searchSessions' }
+    )
   },
 
   /**
    * Generate question suggestions based on context
    */
   async generateSuggestions(request: GenerateSuggestionsRequest): Promise<GenerateSuggestionsResponse> {
-    const response = await apiClient.post('/chat/suggestions', request)
-    return response
+    return withChatErrorHandling(
+      () => apiClient.post('/api/v1/chat/suggestions', request),
+      { operationName: 'generateSuggestions' }
+    )
   },
 
   /**
    * Get chat statistics for analytics
    */
   async getStats(): Promise<ChatStatsResponse> {
-    const response = await apiClient.get('/chat/stats')
-    return response
+    return withChatErrorHandling(
+      () => apiClient.get('/api/v1/chat/stats'),
+      { operationName: 'getStats', showToast: false }  // Don't show toast for analytics
+    )
   }
 }
 
@@ -238,7 +318,18 @@ export const transformToFrontendMessage = (backendMessage: AskQuestionResponse['
   }
 }
 
-// Error handling for chat operations
+// Enhanced error handling with progress tracking
+export interface ChatOperationProgress {
+  operationId: string
+  status: 'pending' | 'in-progress' | 'completed' | 'failed'
+  progress?: number
+  message?: string
+}
+
+// Progress callback type
+export type ProgressCallback = (progress: ChatOperationProgress) => void
+
+// Error handling for chat operations  
 export class ChatAPIError extends Error {
   constructor(message: string, public statusCode?: number, public details?: any) {
     super(message)
@@ -258,4 +349,42 @@ export const checkChatRateLimit = (lastMessageTime: number, messageCount: number
   
   // Check if under limit (10 messages per minute)
   return messageCount < 10
+}
+
+// Helper to handle streaming responses (future enhancement)
+export interface StreamingChatResponse {
+  sessionId: string
+  messageId: string
+  chunk: string
+  isComplete: boolean
+}
+
+export async function* streamChatResponse(
+  sessionId: string,
+  question: string,
+  onProgress?: ProgressCallback
+): AsyncGenerator<StreamingChatResponse> {
+  // This is a placeholder for future streaming implementation
+  // For now, we'll use the regular ask endpoint
+  try {
+    const response = await chatAPI.askQuestion(sessionId, { question })
+    
+    // Simulate streaming by yielding chunks
+    const content = response.message.content
+    const chunkSize = 50
+    
+    for (let i = 0; i < content.length; i += chunkSize) {
+      yield {
+        sessionId,
+        messageId: response.message.id,
+        chunk: content.slice(i, Math.min(i + chunkSize, content.length)),
+        isComplete: i + chunkSize >= content.length
+      }
+      
+      // Small delay to simulate streaming
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  } catch (error) {
+    throw handleChatError(error, { showToast: true })
+  }
 }

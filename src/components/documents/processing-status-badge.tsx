@@ -3,24 +3,41 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 interface ProcessingStatusBadgeProps {
-  status?: 'pending' | 'processing' | 'completed' | 'failed'
+  status?: 'pending' | 'processing' | 'completed' | 'failed' | 'uploaded' | 'ai_processed'
   aiProcessed?: boolean
+  aiProcessingStatus?: 'pending' | 'processing' | 'completed' | 'failed'
+  embeddingStatus?: 'pending' | 'processing' | 'completed' | 'failed'
   className?: string
 }
 
-export function ProcessingStatusBadge({ status, aiProcessed, className }: ProcessingStatusBadgeProps) {
-  // If no status provided but aiProcessed is true, show completed
-  if (!status && aiProcessed) {
-    return (
-      <Badge className={cn("bg-green-100 text-green-800 border-green-200", className)}>
-        <Sparkles className="w-3 h-3 mr-1" />
-        AI Processed
-      </Badge>
-    )
+export function ProcessingStatusBadge({ 
+  status, 
+  aiProcessed, 
+  aiProcessingStatus,
+  embeddingStatus,
+  className 
+}: ProcessingStatusBadgeProps) {
+  // Determine overall status from multiple fields
+  const getOverallStatus = () => {
+    if (status === 'failed' || aiProcessingStatus === 'failed' || embeddingStatus === 'failed') {
+      return 'failed'
+    }
+    if (status === 'processing' || aiProcessingStatus === 'processing' || embeddingStatus === 'processing') {
+      return 'processing'
+    }
+    if (aiProcessed || status === 'ai_processed' || aiProcessingStatus === 'completed') {
+      return 'ai_processed'
+    }
+    if (status === 'uploaded' || status === 'completed') {
+      return 'completed'
+    }
+    return 'pending'
   }
 
+  const overallStatus = getOverallStatus()
+
   // Show status-based badge
-  switch (status) {
+  switch (overallStatus) {
     case 'pending':
       return (
         <Badge className={cn("bg-gray-100 text-gray-800 border-gray-200", className)}>
@@ -39,9 +56,17 @@ export function ProcessingStatusBadge({ status, aiProcessed, className }: Proces
     
     case 'completed':
       return (
-        <Badge className={cn("bg-green-100 text-green-800 border-green-200", className)}>
+        <Badge className={cn("bg-gray-100 text-gray-800 border-gray-200", className)}>
           <CheckCircle className="w-3 h-3 mr-1" />
-          AI Ready
+          Uploaded
+        </Badge>
+      )
+    
+    case 'ai_processed':
+      return (
+        <Badge className={cn("bg-purple-100 text-purple-800 border-purple-200", className)}>
+          <Sparkles className="w-3 h-3 mr-1" />
+          AI Processed
         </Badge>
       )
     

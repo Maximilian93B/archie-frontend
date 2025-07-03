@@ -7,7 +7,8 @@ import { DocumentContextPicker } from './context/document-context-picker'
 import { ContextIndicator } from './context/context-indicator'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useChatStore, ChatMessage } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
+import type { ChatMessage } from '@/store/chat-store'
 import { useAskQuestion } from '@/hooks/queries/chat.queries'
 import { toast } from 'react-hot-toast'
 import { ArrowLeft, MoreVertical, Trash2, Edit2, Settings, FileText } from 'lucide-react'
@@ -38,7 +39,7 @@ export function ChatInterface({
     currentSession,
     setCurrentSession,
     isAsking
-  } = useChatStore()
+  } = useChatStoreSafe()
 
   // Document context state
   const [contextDocuments, setContextDocuments] = useState<string[]>(

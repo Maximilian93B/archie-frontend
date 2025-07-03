@@ -3,7 +3,7 @@
 import { useState, useEffect, forwardRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { useChatStore } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -13,13 +13,7 @@ interface SessionSearchProps {
 
 export const SessionSearch = forwardRef<HTMLInputElement, SessionSearchProps>(
   function SessionSearch({ className }, ref) {
-  const { 
-    searchQuery, 
-    searchSessions, 
-    isSearching,
-    filteredSessions,
-    sessionsList
-  } = useChatStore()
+  const { searchQuery, searchSessions, isSearching, filteredSessions, sessionsList } = useChatStoreSafe()
   
   const [localQuery, setLocalQuery] = useState(searchQuery)
   

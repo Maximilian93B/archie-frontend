@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatAPI, transformToFrontendSession, transformToFrontendMessage } from '@/lib/api/chat'
-import { useChatStore } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { toast } from 'react-hot-toast'
 import type { 
   CreateSessionRequest, 
@@ -34,11 +34,12 @@ export function useChatSessions(params: {
     setIsFetchingSessions, 
     setPagination,
     regroupSessions 
-  } = useChatStore()
+  } = useChatStoreSafe()
 
   return useQuery({
     queryKey: [...chatQueryKeys.sessions(), params],
     queryFn: async () => {
+
       setIsFetchingSessions(true)
       try {
         const response = await chatAPI.getSessions(params)
@@ -72,7 +73,7 @@ export function useChatSessions(params: {
  * Hook to fetch a specific chat session
  */
 export function useChatSession(sessionId: string | null) {
-  const { updateSession } = useChatStore()
+  const { updateSession } = useChatStoreSafe()
 
   return useQuery({
     queryKey: chatQueryKeys.session(sessionId || ''),
@@ -97,7 +98,7 @@ export function useChatSession(sessionId: string | null) {
  */
 export function useCreateChatSession() {
   const queryClient = useQueryClient()
-  const { addSession, setCurrentSession } = useChatStore()
+  const { addSession, setCurrentSession } = useChatStoreSafe()
 
   return useMutation({
     mutationFn: async (request: CreateSessionRequest) => {
@@ -127,7 +128,7 @@ export function useCreateChatSession() {
  */
 export function useUpdateSessionName() {
   const queryClient = useQueryClient()
-  const { updateSession } = useChatStore()
+  const { updateSession } = useChatStoreSafe()
 
   return useMutation({
     mutationFn: async ({ sessionId, sessionName }: { sessionId: string; sessionName: string }) => {
@@ -157,7 +158,7 @@ export function useUpdateSessionName() {
  */
 export function useDeleteChatSession() {
   const queryClient = useQueryClient()
-  const { removeSession, setCurrentSession, currentSessionId } = useChatStore()
+  const { removeSession, setCurrentSession, currentSessionId } = useChatStoreSafe()
 
   return useMutation({
     mutationFn: async (sessionId: string) => {
@@ -196,7 +197,7 @@ export function useAskQuestion() {
     setIsAsking, 
     canSendMessage, 
     incrementMessageCount 
-  } = useChatStore()
+  } = useChatStoreSafe()
 
   return useMutation({
     mutationFn: async ({ sessionId, question }: { sessionId: string; question: string }) => {
@@ -246,7 +247,7 @@ export function useAskQuestion() {
  * Hook to search chat sessions
  */
 export function useSearchChatSessions() {
-  const { setSearchResults, setSearchQuery } = useChatStore()
+  const { setSearchResults, setSearchQuery } = useChatStoreSafe()
 
   return useMutation({
     mutationFn: async (params: SearchSessionsParams) => {
@@ -296,7 +297,7 @@ export function useChatStats() {
  * Hook to get sessions for a specific document
  */
 export function useDocumentSessions(documentId: string | null) {
-  const { addSession } = useChatStore()
+  const { addSession } = useChatStoreSafe()
 
   return useQuery({
     queryKey: chatQueryKeys.documentSessions(documentId || ''),
@@ -320,7 +321,7 @@ export function useDocumentSessions(documentId: string | null) {
  * Hook to pin/unpin sessions
  */
 export function usePinSession() {
-  const { pinSession, unpinSession } = useChatStore()
+  const { pinSession, unpinSession } = useChatStoreSafe()
 
   return {
     pinSession: (sessionId: string) => {

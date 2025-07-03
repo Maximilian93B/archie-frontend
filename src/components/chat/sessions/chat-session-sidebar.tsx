@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useChatStore, selectSessionSidebarOpen } from '@/store/chat-store'
+import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import { SessionQuickActions } from './session-quick-actions'
 import { SessionSearch } from './session-search'
 import { PinnedSessions } from './pinned-sessions'
@@ -22,13 +22,13 @@ interface ChatSessionSidebarProps {
 }
 
 export function ChatSessionSidebar({ className }: ChatSessionSidebarProps) {
-  const {
-    sessionSidebarOpen,
-    toggleSessionSidebar,
-    searchQuery,
-    sessionsList,
-    regroupSessions
-  } = useChatStore()
+  const { 
+    sessionSidebarOpen, 
+    toggleSessionSidebar, 
+    searchQuery, 
+    sessionsList, 
+    regroupSessions 
+  } = useChatStoreSafe()
   
   const [isMobile, setIsMobile] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -78,7 +78,7 @@ export function ChatSessionSidebar({ className }: ChatSessionSidebarProps) {
   
   // Regroup sessions when sessionsList changes
   useEffect(() => {
-    if (sessionsList.length > 0) {
+    if (sessionsList.length > 0 && regroupSessions) {
       regroupSessions()
     }
   }, [sessionsList.length, regroupSessions])
@@ -135,7 +135,7 @@ interface SidebarContentProps {
 }
 
 function SidebarContent({ searchInputRef }: SidebarContentProps) {
-  const { sessionsList, searchQuery } = useChatStore()
+  const { sessionsList, searchQuery } = useChatStoreSafe()
   
   return (
     <div className="flex flex-col h-full">

@@ -20,7 +20,9 @@
       "Bash(npm run test:*)",
       "Bash(npm run build:*)",
       "Bash(pkill:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

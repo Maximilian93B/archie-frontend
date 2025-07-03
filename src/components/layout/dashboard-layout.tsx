@@ -55,24 +55,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     // Check for approaching limits
     const checkLimits = async () => {
-      const quotas = await Promise.all([
-        checkQuota('documents', false),
-        checkQuota('storage', false),
-        checkQuota('ai_credits', false)
-      ])
-      
-      // Check if any quota is above 80%
-      const hasWarning = quotas.some(q => {
-        if (!q.limit || q.limit === -1) return false
-        const percentage = (q.used || 0) / q.limit * 100
-        return percentage >= 80
-      })
-      
-      setHasLimitWarning(hasWarning)
+      try {
+        const quotaChecks = await Promise.all([
+          checkQuota('documents', { showError: false, showWarning: false }),
+          checkQuota('storage', { showError: false, showWarning: false }),
+          checkQuota('ai_credits', { showError: false, showWarning: false })
+        ])
+        
+        // If any quota check returns false, show warning
+        const hasWarning = quotaChecks.some(allowed => !allowed)
+        
+        setHasLimitWarning(hasWarning)
+      } catch (error) {
+        console.error('Failed to check quotas:', error)
+      }
     }
     
     checkLimits()
-  }, [])
+  }, [checkQuota])
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">

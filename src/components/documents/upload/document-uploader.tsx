@@ -43,13 +43,40 @@ export function DocumentUploader() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
+      // Documents
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.oasis.opendocument.text': ['.odt'],
+      'application/rtf': ['.rtf'],
+      'text/rtf': ['.rtf'],
+      
+      // Text & Data
       'text/plain': ['.txt'],
+      'text/markdown': ['.md'],
       'text/csv': ['.csv'],
+      'application/json': ['.json'],
+      'application/xml': ['.xml'],
+      'text/xml': ['.xml'],
+      
+      // Spreadsheets
       'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
+      
+      // Presentations
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+      'application/vnd.oasis.opendocument.presentation': ['.odp'],
+      
+      // Images
+      'image/png': ['.png'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/gif': ['.gif'],
+      'image/webp': ['.webp'],
+      'image/bmp': ['.bmp'],
+      'image/svg+xml': ['.svg'],
+      'image/tiff': ['.tiff', '.tif'],
     },
     maxSize: 50 * 1024 * 1024 // 50MB
   })
@@ -144,7 +171,8 @@ export function DocumentUploader() {
           or <span className="text-primary font-medium">browse</span> to upload
         </p>
         <p className="text-xs text-gray-400 mt-4">
-          Supported formats: PDF, DOC, DOCX, TXT, CSV, XLS, XLSX (max 50MB)
+          Supported: Documents (PDF, Word, ODT, RTF) • Data (TXT, CSV, JSON, XML) • 
+          Sheets (Excel, ODS) • Slides (PowerPoint, ODP) • Images (PNG, JPG, GIF, WebP, BMP, SVG, TIFF)
         </p>
       </Card>
 
@@ -261,7 +289,7 @@ export function QuickUploadButton({ onSuccess }: { onSuccess?: () => void }) {
         id="quick-upload"
         className="hidden"
         onChange={handleFileSelect}
-        accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+        accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.json,.xml,.xls,.xlsx,.ods,.ppt,.pptx,.odp,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.tiff,.tif"
       />
       <Button
         variant="outline"

@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
+import { useEffect, useState } from 'react'
+
+// Stable empty arrays for SSR
+const EMPTY_SESSIONS: ChatSession[] = []
+const EMPTY_STRING_ARRAY: string[] = []
 
 // Types
 export interface ChatMessage {
@@ -23,6 +28,10 @@ export interface ChatSession {
   createdAt: string
   updatedAt: string
   canModify: boolean
+  // Pagination support
+  hasMoreMessages?: boolean
+  oldestLoadedMessageId?: string
+  newestLoadedMessageId?: string
 }
 
 export interface ChatState {
@@ -64,6 +73,14 @@ export interface ChatState {
     totalPages: number
   }
   
+  // Message pagination state
+  messagePagination: Map<string, {
+    isLoadingMore: boolean
+    hasMore: boolean
+    page: number
+    pageSize: number
+  }>
+  
   // Search
   searchQuery: string
   searchResults: ChatSession[]
@@ -88,6 +105,9 @@ export interface ChatState {
   addMessage: (sessionId: string, message: ChatMessage) => void
   updateMessage: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void
   addOptimisticMessage: (sessionId: string, content: string) => ChatMessage
+  prependMessages: (sessionId: string, messages: ChatMessage[]) => void
+  loadMoreMessages: (sessionId: string) => void
+  setMessagePaginationLoading: (sessionId: string, loading: boolean) => void
   
   // Draft actions
   setDraft: (sessionId: string, content: string) => void
@@ -131,17 +151,17 @@ const initialState = {
   currentSessionId: null,
   currentSession: null,
   sessions: new Map(),
-  sessionsList: [],
+  sessionsList: EMPTY_SESSIONS,
   
   // Session Management (NEW)
   pinnedSessionIds: new Set<string>(),
   sessionGroups: {
     byDocument: new Map(),
     byDate: {
-      today: [],
-      thisWeek: [],
-      thisMonth: [],
-      older: []
+      today: EMPTY_STRING_ARRAY,
+      thisWeek: EMPTY_STRING_ARRAY,
+      thisMonth: EMPTY_STRING_ARRAY,
+      older: EMPTY_STRING_ARRAY
     }
   },
   expandedGroups: new Set<string>(['pinned', 'today']), // Default expanded groups
@@ -157,11 +177,12 @@ const initialState = {
     total: 0,
     totalPages: 0
   },
+  messagePagination: new Map(),
   searchQuery: '',
-  searchResults: [],
+  searchResults: EMPTY_SESSIONS,
   isSearching: false,
-  filteredSessions: [],
-  recentSessionIds: [],
+  filteredSessions: EMPTY_STRING_ARRAY,
+  recentSessionIds: EMPTY_STRING_ARRAY,
   maxRecentSessions: 10,
   messagesSentInLastMinute: 0,
   lastMessageTimestamp: 0
@@ -289,6 +310,71 @@ export const useChatStore = create<ChatState>()(
           get().addMessage(sessionId, optimisticMessage)
           get().clearDraft(sessionId)
           return optimisticMessage
+        },
+        
+        prependMessages: (sessionId, messages) => {
+          set((state) => {
+            const session = state.sessions.get(sessionId)
+            if (!session) return state
+            
+            // Prepend messages (older messages go at the beginning)
+            const updatedSession = {
+              ...session,
+              messages: [...messages, ...session.messages],
+              oldestLoadedMessageId: messages[0]?.id || session.oldestLoadedMessageId
+            }
+            
+            const newSessions = new Map(state.sessions)
+            newSessions.set(sessionId, updatedSession)
+            
+            return {
+              sessions: newSessions,
+              currentSession: state.currentSessionId === sessionId ? updatedSession : state.currentSession,
+              sessionsList: state.sessionsList.map(s => s.id === sessionId ? updatedSession : s)
+            }
+          })
+        },
+        
+        loadMoreMessages: (sessionId) => {
+          const state = get()
+          const pagination = state.messagePagination.get(sessionId) || {
+            isLoadingMore: false,
+            hasMore: true,
+            page: 1,
+            pageSize: 50
+          }
+          
+          // Don't load if already loading or no more messages
+          if (pagination.isLoadingMore || !pagination.hasMore) return
+          
+          // Set loading state
+          set((state) => {
+            const newPagination = new Map(state.messagePagination)
+            newPagination.set(sessionId, {
+              ...pagination,
+              isLoadingMore: true
+            })
+            return { messagePagination: newPagination }
+          })
+        },
+        
+        setMessagePaginationLoading: (sessionId, loading) => {
+          set((state) => {
+            const pagination = state.messagePagination.get(sessionId) || {
+              isLoadingMore: false,
+              hasMore: true,
+              page: 1,
+              pageSize: 50
+            }
+            
+            const newPagination = new Map(state.messagePagination)
+            newPagination.set(sessionId, {
+              ...pagination,
+              isLoadingMore: loading
+            })
+            
+            return { messagePagination: newPagination }
+          })
         },
         
         // Draft management
@@ -506,6 +592,7 @@ export const useChatStore = create<ChatState>()(
           ...initialState, 
           sessions: new Map(), 
           drafts: new Map(),
+          messagePagination: new Map(),
           pinnedSessionIds: new Set<string>(),
           expandedGroups: new Set<string>(['pinned', 'today'])
         })
@@ -513,15 +600,27 @@ export const useChatStore = create<ChatState>()(
       {
         name: 'archivus-chat-store',
         storage: createJSONStorage(() => localStorage),
+        skipHydration: true, // Important for SSR
         partialize: (state) => ({
-          // Only persist drafts and recent session IDs
+          // Only persist drafts, recent session IDs, and UI preferences
           drafts: Array.from(state.drafts.entries()),
-          recentSessionIds: state.recentSessionIds
+          recentSessionIds: state.recentSessionIds,
+          pinnedSessionIds: Array.from(state.pinnedSessionIds),
+          expandedGroups: Array.from(state.expandedGroups),
+          sessionSidebarOpen: state.sessionSidebarOpen
         }),
         onRehydrateStorage: () => (state) => {
-          if (state && state.drafts) {
-            // Convert array back to Map
-            state.drafts = new Map(state.drafts as any)
+          if (state) {
+            // Convert arrays back to Maps/Sets
+            if (state.drafts) {
+              state.drafts = new Map(state.drafts as any)
+            }
+            if (state.pinnedSessionIds) {
+              state.pinnedSessionIds = new Set(state.pinnedSessionIds as any)
+            }
+            if (state.expandedGroups) {
+              state.expandedGroups = new Set(state.expandedGroups as any)
+            }
           }
         }
       }
@@ -534,39 +633,48 @@ export const selectCurrentSession = (state: ChatState) => state.currentSession
 export const selectSessionById = (id: string) => (state: ChatState) => state.sessions.get(id)
 export const selectDraftForSession = (id: string) => (state: ChatState) => state.drafts.get(id)
 export const selectIsRateLimited = (state: ChatState) => !state.canSendMessage()
-export const selectRecentSessions = (state: ChatState) => 
-  state.recentSessionIds
-    .map(id => state.sessions.get(id))
-    .filter(Boolean) as ChatSession[]
+export const selectMessagePagination = (sessionId: string) => (state: ChatState) => 
+  state.messagePagination.get(sessionId) || { isLoadingMore: false, hasMore: true, page: 1, pageSize: 50 }
 
-// Session Management Selectors (NEW)
-export const selectPinnedSessions = (state: ChatState) => 
-  Array.from(state.pinnedSessionIds)
-    .map(id => state.sessions.get(id))
-    .filter(Boolean) as ChatSession[]
+// Simple selectors for SSR compatibility
+export const selectRecentSessions = (state: ChatState) => state.sessionsList
+export const selectPinnedSessions = (state: ChatState) => state.sessionsList.filter(s => state.pinnedSessionIds.has(s.id))
 
 export const selectSessionsByDocument = (docId: string) => (state: ChatState) => {
   const sessionIds = state.sessionGroups.byDocument.get(docId) || []
-  return sessionIds
-    .map(id => state.sessions.get(id))
-    .filter(Boolean) as ChatSession[]
+  return state.sessionsList.filter(s => sessionIds.includes(s.id))
 }
 
 export const selectSessionsByDateGroup = (group: 'today' | 'thisWeek' | 'thisMonth' | 'older') => (state: ChatState) => {
   const sessionIds = state.sessionGroups.byDate[group] || []
-  return sessionIds
-    .map(id => state.sessions.get(id))
-    .filter(Boolean) as ChatSession[]
+  return state.sessionsList.filter(s => sessionIds.includes(s.id))
 }
 
 export const selectFilteredSessions = (state: ChatState) => {
   if (!state.searchQuery) return state.sessionsList
-  return state.filteredSessions
-    .map(id => state.sessions.get(id))
-    .filter(Boolean) as ChatSession[]
+  return state.sessionsList.filter(s => state.filteredSessions.includes(s.id))
 }
 
 export const selectIsGroupExpanded = (groupId: string) => (state: ChatState) => 
   state.expandedGroups.has(groupId)
 
 export const selectSessionSidebarOpen = (state: ChatState) => state.sessionSidebarOpen
+
+// Hydration hook for SSR
+export const useChatStoreHydration = () => {
+  const [hydrated, setHydrated] = useState(false)
+  
+  useEffect(() => {
+    const unsubscribe = useChatStore.persist.onHydrate(() => setHydrated(false))
+    const unsubscribeFinish = useChatStore.persist.onFinishHydration(() => setHydrated(true))
+    
+    setHydrated(useChatStore.persist.hasHydrated())
+    
+    return () => {
+      unsubscribe()
+      unsubscribeFinish()
+    }
+  }, [])
+  
+  return hydrated
+}

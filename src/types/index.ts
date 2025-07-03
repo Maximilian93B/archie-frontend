@@ -195,6 +195,9 @@ export interface Document {
   ai_key_points?: string[];
   ai_category?: string;
   ai_confidence_score?: number;
+  // Preview fields
+  thumbnail_url?: string;
+  preview_url?: string;
   // Relationships (optional based on API includes)
   tags?: Tag[];
   categories?: Category[];

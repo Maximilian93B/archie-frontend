@@ -33,18 +33,30 @@ export default function AuthCallbackPage() {
           const response = await apiClient.post('/api/v1/auth/oauth/callback', { 
             code,
             redirect_uri: `${window.location.origin}/auth/callback`
+          }, {
+            requestConfig: {
+              skipAuth: true,
+            }
           })
 
           if (response.token && response.user) {
-            // Store tokens
+            // Store tokens in localStorage first
             localStorage.setItem('access_token', response.token)
             localStorage.setItem('refresh_token', response.refresh_token)
-            if (response.user.tenant_id) {
-              localStorage.setItem('tenant_id', response.user.tenant_id)
+            
+            // Store subdomain consistently
+            if (response.user.tenant_subdomain || response.user.company) {
+              const subdomain = response.user.tenant_subdomain || 
+                               response.user.company?.toLowerCase().replace(/[^a-z0-9]/g, '-');
+              if (subdomain) {
+                localStorage.setItem('tenant_subdomain', subdomain);
+              }
             }
             
-            // Update auth context
-            await setAuth(response.user, response.token)
+            // Update auth context with proper expiration
+            await setAuth(response.user, response.token, response.expires_in)
+            
+            // Let auth context handle subscription status fetch
             
             toast({
               title: 'Success',
@@ -55,11 +67,14 @@ export default function AuthCallbackPage() {
           } else {
             throw new Error('Invalid response from server')
           }
-        } catch (error: any) {
+        } catch (error) {
           console.error('OAuth callback error:', error)
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : 'Failed to complete OAuth login'
           toast({
             title: 'Authentication failed',
-            description: error.response?.data?.message || 'Failed to complete OAuth login',
+            description: errorMessage,
             variant: 'destructive',
           })
           router.push('/auth/login')

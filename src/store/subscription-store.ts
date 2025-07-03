@@ -77,11 +77,17 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
             lastFetched: { ...get().lastFetched, status: now },
             isLoading: false 
           })
-        } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to fetch subscription status',
-            isLoading: false 
-          })
+        } catch (error: any) {
+          // Don't show error for 404s as we handle this in the API layer
+          if (error.response?.status !== 404) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Failed to fetch subscription status',
+              isLoading: false 
+            })
+          } else {
+            // For 404, we still got a default status from the API layer
+            set({ isLoading: false })
+          }
         }
       },
 
@@ -118,12 +124,18 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
         }
 
         try {
+          // First ensure we have status
+          const status = get().status
+          if (!status) {
+            await get().fetchStatus()
+          }
+          
           const quota = await subscriptionAPI.checkQuota(feature)
           
           // Add percentage calculation
           const enhancedQuota: QuotaCheck = {
             ...quota,
-            percentage: quota.limit && quota.used !== undefined 
+            percentage: quota.limit && quota.limit !== -1 && quota.used !== undefined 
               ? Math.round((quota.used / quota.limit) * 100)
               : 0
           }
@@ -138,8 +150,15 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
           return enhancedQuota
         } catch (error) {
           console.error('Failed to check quota:', error)
-          // Return a safe default that blocks the action
-          return { feature, allowed: false, limit: 0, used: 0, remaining: 0, percentage: 0 }
+          // Return a permissive default if quota check fails
+          return { 
+            feature, 
+            allowed: true, 
+            limit: -1, 
+            used: 0, 
+            remaining: -1, 
+            percentage: 0 
+          }
         }
       },
 
