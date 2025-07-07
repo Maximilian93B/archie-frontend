@@ -36,6 +36,11 @@ yarn-error.log*
 .env.development
 .env.production
 
+# .md files
+*.md    
+!README.md
+
+
 # vercel
 .vercel
 
