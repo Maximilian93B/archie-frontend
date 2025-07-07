@@ -94,17 +94,14 @@ export function DocumentUploader() {
             : f
         ))
 
-        // Create form data
-        const formData = new FormData()
-        formData.append('file', uploadFile.file)
-
         // Upload with progress tracking
-        await uploadDocument(formData, {
-          onUploadProgress: (progressEvent) => {
-            const progress = progressEvent.total
-              ? Math.round((progressEvent.loaded / progressEvent.total) * 100)
-              : 0
-            
+        await uploadDocument({
+          file: uploadFile.file,
+          options: {
+            enable_ai: true,
+            enable_ocr: false
+          },
+          onProgress: (progress) => {
             setFiles(prev => prev.map(f => 
               f.id === uploadFile.id 
                 ? { ...f, progress }
@@ -268,11 +265,15 @@ export function QuickUploadButton({ onSuccess }: { onSuccess?: () => void }) {
     if (!canUpload) return
 
     setIsUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
 
     try {
-      await uploadDocument(formData)
+      await uploadDocument({
+        file,
+        options: {
+          enable_ai: true,
+          enable_ocr: false
+        }
+      })
       toast.success('Document uploaded successfully')
       onSuccess?.()
     } catch (error) {

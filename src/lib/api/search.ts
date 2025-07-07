@@ -45,6 +45,52 @@ export interface SemanticSearchOptions {
   documentIds?: string[]
 }
 
+export interface EnhancedSearchOptions {
+  query: string
+  semantic?: boolean
+  includeAI?: boolean
+  documentTypes?: string[]
+  dateRange?: {
+    from: string
+    to: string
+  }
+  maxResults?: number
+  relevanceThreshold?: number
+}
+
+export interface EnhancedSearchResult {
+  id: string
+  title: string
+  relevanceScore: number
+  highlightedContent?: string
+  aiSummary?: string
+  matchingSections?: Array<{
+    type: 'paragraph' | 'heading' | 'list' | 'table'
+    content: string
+    confidence: number
+  }>
+  documentType?: string
+  createdAt: string
+  updatedAt: string
+  fileSize: number
+  tags?: string[]
+}
+
+export interface QueryAnalysis {
+  intent: string
+  entities: string[]
+  themes: string[]
+  suggestedRefinements?: string[]
+}
+
+export interface EnhancedSearchResponse {
+  results: EnhancedSearchResult[]
+  totalResults: number
+  processingTimeMs: number
+  semanticEnabled: boolean
+  queryAnalysis?: QueryAnalysis
+}
+
 class SearchAPI {
   private basePath = '/api/v1/search'
 
@@ -199,6 +245,97 @@ class SearchAPI {
       query,
       document_ids: documentIds,
     })
+  }
+
+  /**
+   * Enhanced search with AI features
+   * Provides semantic understanding, query analysis, and AI-generated summaries
+   */
+  async enhancedSearch(options: EnhancedSearchOptions): Promise<EnhancedSearchResponse> {
+    const params = new URLSearchParams()
+    
+    // Required query parameter
+    params.append('query', options.query)
+    
+    // Optional parameters
+    if (options.semantic !== undefined) {
+      params.append('semantic', options.semantic.toString())
+    }
+    if (options.includeAI !== undefined) {
+      params.append('include_ai', options.includeAI.toString())
+    }
+    if (options.documentTypes && options.documentTypes.length > 0) {
+      params.append('document_types', options.documentTypes.join(','))
+    }
+    if (options.dateRange) {
+      params.append('date_from', options.dateRange.from)
+      params.append('date_to', options.dateRange.to)
+    }
+    if (options.maxResults) {
+      params.append('max_results', options.maxResults.toString())
+    }
+    if (options.relevanceThreshold !== undefined) {
+      params.append('relevance_threshold', options.relevanceThreshold.toString())
+    }
+    
+    const response = await apiClient.get<{
+      results: Array<{
+        id: string
+        title: string
+        relevance_score: number
+        highlighted_content?: string
+        ai_summary?: string
+        matching_sections?: Array<{
+          type: string
+          content: string
+          confidence: number
+        }>
+        document_type?: string
+        created_at: string
+        updated_at: string
+        file_size: number
+        tags?: string[]
+      }>
+      total_results: number
+      processing_time_ms: number
+      semantic_enabled: boolean
+      query_analysis?: {
+        intent: string
+        entities: string[]
+        themes: string[]
+        suggested_refinements?: string[]
+      }
+    }>(`${this.basePath}/enhanced?${params.toString()}`)
+    
+    // Transform snake_case to camelCase
+    return {
+      results: response.results.map(result => ({
+        id: result.id,
+        title: result.title,
+        relevanceScore: result.relevance_score,
+        highlightedContent: result.highlighted_content,
+        aiSummary: result.ai_summary,
+        matchingSections: result.matching_sections?.map(section => ({
+          type: section.type as 'paragraph' | 'heading' | 'list' | 'table',
+          content: section.content,
+          confidence: section.confidence
+        })),
+        documentType: result.document_type,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+        fileSize: result.file_size,
+        tags: result.tags
+      })),
+      totalResults: response.total_results,
+      processingTimeMs: response.processing_time_ms,
+      semanticEnabled: response.semantic_enabled,
+      queryAnalysis: response.query_analysis && {
+        intent: response.query_analysis.intent,
+        entities: response.query_analysis.entities,
+        themes: response.query_analysis.themes,
+        suggestedRefinements: response.query_analysis.suggested_refinements
+      }
+    }
   }
 }
 

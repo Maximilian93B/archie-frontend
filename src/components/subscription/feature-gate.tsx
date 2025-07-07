@@ -3,7 +3,7 @@ import { Lock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
-import { useSubscriptionStore } from '@/store/subscription-store'
+import { useSubscription } from '@/hooks/use-subscription'
 import type { SubscriptionTier } from '@/types/subscription'
 
 interface FeatureGateProps {
@@ -29,16 +29,16 @@ export function FeatureGate({
   fallback
 }: FeatureGateProps) {
   const router = useRouter()
-  const { subscription } = useSubscriptionStore()
+  const { status } = useSubscription()
   
   // Check if user has access to the feature
   const hasAccess = () => {
-    if (!subscription) return false
+    if (!status) return false
     
     // Check if subscription is active or trialing
-    if (!['active', 'trialing'].includes(subscription.status)) return false
+    if (!status.isActive && !status.isTrialing) return false
     
-    const userTier = subscription.tier
+    const userTier = status.tier as SubscriptionTier
     
     // If specific tier is required
     if (requiredTier) {
@@ -97,20 +97,19 @@ interface InlineFeatureGateProps extends FeatureGateProps {
 }
 
 export function InlineFeatureGate({
-  feature,
   requiredTier,
   minimumTier,
   children,
   showLock = true,
   disabled = true
 }: InlineFeatureGateProps) {
-  const { subscription } = useSubscriptionStore()
+  const { status } = useSubscription()
   
   const hasAccess = () => {
-    if (!subscription) return false
-    if (!['active', 'trialing'].includes(subscription.status)) return false
+    if (!status) return false
+    if (!status.isActive && !status.isTrialing) return false
     
-    const userTier = subscription.tier
+    const userTier = status.tier as SubscriptionTier
     
     if (requiredTier) {
       return userTier === requiredTier

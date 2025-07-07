@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { chatAPI, checkChatRateLimit, streamChatResponse } from '@/lib/api/chat'
 import { apiClient } from '@/lib/api/client'
 import { ChatErrorType } from '@/lib/chat-errors'
-import { toast } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 
 // Mock dependencies
 vi.mock('@/lib/api/client', () => ({
@@ -15,8 +15,9 @@ vi.mock('@/lib/api/client', () => ({
 }))
 
 vi.mock('react-hot-toast', () => ({
-  toast: {
-    error: vi.fn()
+  default: {
+    error: vi.fn(),
+    success: vi.fn()
   }
 }))
 
@@ -65,7 +66,7 @@ describe('Chat API', () => {
         session_name: 'New Session'
       })
 
-      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/chat/sessions', {
+      expect(apiClient.post).toHaveBeenCalledWith('/chat/sessions', {
         document_id: 'doc-1',
         session_name: 'New Session'
       })
@@ -97,12 +98,11 @@ describe('Chat API', () => {
 
       const result = await chatAPI.getSessions({
         page: 1,
-        page_size: 20,
-        document_id: 'doc-1'
+        limit: 20
       })
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/chat/sessions?page=1&page_size=20&document_id=doc-1'
+        '/chat/sessions?page=1&limit=20'
       )
       expect(result).toEqual(mockResponse)
     })
@@ -113,7 +113,7 @@ describe('Chat API', () => {
 
       await chatAPI.getSessions()
 
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/chat/sessions')
+      expect(apiClient.get).toHaveBeenCalledWith('/chat/sessions')
     })
   })
 
@@ -121,19 +121,40 @@ describe('Chat API', () => {
     it('should get a specific session', async () => {
       const mockResponse = {
         id: 'session-1',
-        messages: []
+        document_id: 'doc-1',
+        user_id: 'user-1',
+        session_name: 'Test Session',
+        messages: [],
+        context: {},
+        is_active: true,
+        total_messages: 0,
+        last_message_at: null,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
       }
 
       ;(apiClient.get as any).mockResolvedValue(mockResponse)
 
       const result = await chatAPI.getSession('session-1')
 
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/chat/sessions/session-1')
+      expect(apiClient.get).toHaveBeenCalledWith('/chat/sessions/session-1')
       expect(result).toEqual(mockResponse)
     })
 
     it('should get session with pagination params', async () => {
-      const mockResponse = { id: 'session-1', messages: [] }
+      const mockResponse = {
+        id: 'session-1',
+        document_id: 'doc-1',
+        user_id: 'user-1',
+        session_name: 'Test Session',
+        messages: [],
+        context: {},
+        is_active: true,
+        total_messages: 0,
+        last_message_at: null,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      }
       ;(apiClient.get as any).mockResolvedValue(mockResponse)
 
       await chatAPI.getSession('session-1', {
@@ -143,7 +164,7 @@ describe('Chat API', () => {
       })
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/chat/sessions/session-1?page=2&limit=50&offset=50'
+        '/chat/sessions/session-1?page=2&limit=50&offset=50'
       )
     })
   })
@@ -167,7 +188,7 @@ describe('Chat API', () => {
       })
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/chat/sessions/session-1/ask',
+        '/chat/sessions/session-1/ask',
         { question: 'What is this document about?' }
       )
       expect(result).toEqual(mockResponse)
@@ -193,15 +214,27 @@ describe('Chat API', () => {
 
   describe('updateSessionName', () => {
     it('should update session name', async () => {
-      const mockResponse = { id: 'session-1', session_name: 'Updated Name' }
+      const mockResponse = { 
+        id: 'session-1', 
+        document_id: 'doc-1',
+        user_id: 'user-1',
+        session_name: 'Updated Name',
+        messages: [],
+        context: {},
+        is_active: true,
+        total_messages: 0,
+        last_message_at: null,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      }
       ;(apiClient.put as any).mockResolvedValue(mockResponse)
 
       const result = await chatAPI.updateSessionName('session-1', {
-        session_name: 'Updated Name'
+        name: 'Updated Name'
       })
 
       expect(apiClient.put).toHaveBeenCalledWith(
-        '/api/v1/chat/sessions/session-1/name',
+        '/chat/sessions/session-1/name',
         { session_name: 'Updated Name' }
       )
       expect(result).toEqual(mockResponse)
@@ -214,7 +247,7 @@ describe('Chat API', () => {
 
       const result = await chatAPI.deleteSession('session-1')
 
-      expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/chat/sessions/session-1')
+      expect(apiClient.delete).toHaveBeenCalledWith('/chat/sessions/session-1')
       expect(result).toEqual({ success: true })
     })
   })
@@ -230,13 +263,13 @@ describe('Chat API', () => {
       ;(apiClient.get as any).mockResolvedValue(mockResponse)
 
       const result = await chatAPI.searchSessions({
-        q: 'test',
+        query: 'test',
         limit: 10,
         document_id: 'doc-1'
       })
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/chat/search?q=test&limit=10&document_id=doc-1'
+        '/chat/search?query=test&limit=10&document_id=doc-1'
       )
       expect(result).toEqual(mockResponse)
     })
@@ -257,7 +290,7 @@ describe('Chat API', () => {
         context: 'test context'
       })
 
-      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/chat/suggestions', {
+      expect(apiClient.post).toHaveBeenCalledWith('/chat/suggestions', {
         document_id: 'doc-1',
         context: 'test context'
       })
@@ -277,7 +310,7 @@ describe('Chat API', () => {
 
       const result = await chatAPI.getStats()
 
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/chat/stats')
+      expect(apiClient.get).toHaveBeenCalledWith('/chat/stats')
       expect(result).toEqual(mockResponse)
     })
 

@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatAPI, transformToFrontendSession, transformToFrontendMessage } from '@/lib/api/chat'
 import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
-import { toast } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import type { 
   CreateSessionRequest, 
   AskQuestionRequest, 
   UpdateSessionNameRequest, 
-  SearchSessionsParams,
-  GenerateSuggestionsRequest 
-} from '@/lib/api/chat'
+  GetSessionsParams,
+  SearchParams,
+  SuggestionsRequest 
+} from '@/types/chat'
 
 // Query keys for React Query
 export const chatQueryKeys = {
@@ -16,19 +17,15 @@ export const chatQueryKeys = {
   sessions: () => [...chatQueryKeys.all, 'sessions'] as const,
   session: (id: string) => [...chatQueryKeys.all, 'session', id] as const,
   documentSessions: (documentId: string) => [...chatQueryKeys.all, 'document-sessions', documentId] as const,
-  search: (params: SearchSessionsParams) => [...chatQueryKeys.all, 'search', params] as const,
+  search: (params: SearchParams) => [...chatQueryKeys.all, 'search', params] as const,
   stats: () => [...chatQueryKeys.all, 'stats'] as const,
-  suggestions: (params: GenerateSuggestionsRequest) => [...chatQueryKeys.all, 'suggestions', params] as const
+  suggestions: (params: SuggestionsRequest) => [...chatQueryKeys.all, 'suggestions', params] as const
 }
 
 /**
  * Hook to fetch all chat sessions
  */
-export function useChatSessions(params: {
-  page?: number
-  page_size?: number
-  document_id?: string
-} = {}) {
+export function useChatSessions(params: GetSessionsParams = {}) {
   const { 
     addSession, 
     setIsFetchingSessions, 
@@ -132,7 +129,7 @@ export function useUpdateSessionName() {
 
   return useMutation({
     mutationFn: async ({ sessionId, sessionName }: { sessionId: string; sessionName: string }) => {
-      return await chatAPI.updateSessionName(sessionId, { session_name: sessionName })
+      return await chatAPI.updateSessionName(sessionId, { name: sessionName })
     },
     onSuccess: (response, { sessionId }) => {
       const frontendSession = transformToFrontendSession(response)
@@ -250,13 +247,13 @@ export function useSearchChatSessions() {
   const { setSearchResults, setSearchQuery } = useChatStoreSafe()
 
   return useMutation({
-    mutationFn: async (params: SearchSessionsParams) => {
+    mutationFn: async (params: SearchParams) => {
       return await chatAPI.searchSessions(params)
     },
     onSuccess: (response, params) => {
       const frontendSessions = response.sessions.map(transformToFrontendSession)
       setSearchResults(frontendSessions)
-      setSearchQuery(params.q)
+      setSearchQuery(params.query)
     },
     onError: (error) => {
       console.error('Failed to search sessions:', error)
@@ -268,7 +265,7 @@ export function useSearchChatSessions() {
 /**
  * Hook to get chat suggestions
  */
-export function useChatSuggestions(params: GenerateSuggestionsRequest) {
+export function useChatSuggestions(params: SuggestionsRequest) {
   return useQuery({
     queryKey: chatQueryKeys.suggestions(params),
     queryFn: async () => {

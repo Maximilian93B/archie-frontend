@@ -42,7 +42,7 @@ export default function BillingPage() {
   const [quotaLoading, setQuotaLoading] = useState(true)
 
   useEffect(() => {
-    refreshStatus()
+    // Only load quotas, subscription status is already loaded by SubscriptionProvider
     loadQuotas()
   }, [])
 

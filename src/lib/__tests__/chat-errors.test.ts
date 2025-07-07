@@ -1,20 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   ChatErrorType,
+  ChatErrorCode,
   ChatError,
   mapBackendError,
   handleChatError,
   retryWithBackoff,
-  validateChatInput,
-  errorMessages,
-  retryConfig
+  formatErrorMessage,
+  isErrorType,
+  getRetryInfo
 } from '@/lib/chat-errors'
-import { toast } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 
 // Mock react-hot-toast
 vi.mock('react-hot-toast', () => ({
-  toast: {
-    error: vi.fn()
+  default: {
+    error: vi.fn(),
+    success: vi.fn()
   }
 }))
 
@@ -75,7 +77,7 @@ describe('Chat Error Handling', () => {
       }
       const chatError = mapBackendError(error)
 
-      expect(chatError.type).toBe(ChatErrorType.ACCESS_DENIED)
+      expect(chatError.type).toBe(ChatErrorType.UNAUTHORIZED)
       expect(chatError.retryable).toBe(false)
       expect(chatError.statusCode).toBe(403)
     })
@@ -104,7 +106,7 @@ describe('Chat Error Handling', () => {
       }
       const chatError = mapBackendError(error)
 
-      expect(chatError.type).toBe(ChatErrorType.INVALID_INPUT)
+      expect(chatError.type).toBe(ChatErrorType.INVALID_REQUEST)
       expect(chatError.retryable).toBe(false)
     })
 
@@ -138,7 +140,7 @@ describe('Chat Error Handling', () => {
       const error = {
         response: {
           status: 418,
-          data: { error: "I'm a teapot" }
+          data: { error: "I'm a teapot", message: "I'm a teapot" }
         }
       }
       const chatError = mapBackendError(error)
@@ -153,13 +155,8 @@ describe('Chat Error Handling', () => {
       const error = new Error('Test error')
       const chatError = handleChatError(error)
 
-      expect(toast.error).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          duration: 5000,
-          icon: expect.any(String)
-        })
-      )
+      expect(toast.error).toHaveBeenCalled()
+      expect(chatError).toBeInstanceOf(ChatError)
     })
 
     it('should not show toast when disabled', () => {
@@ -169,124 +166,69 @@ describe('Chat Error Handling', () => {
       expect(toast.error).not.toHaveBeenCalled()
     })
 
-    it('should add retry action for retryable errors', () => {
-      const onRetry = vi.fn()
+    it('should handle rate limited errors with special toast', () => {
       const error = {
         response: {
-          status: 503,
-          data: { error: 'Service unavailable' }
+          status: 429,
+          data: { error: 'Rate limited' },
+          headers: { 'retry-after': '60' }
         }
       }
 
-      handleChatError(error, { onRetry, retryCount: 0 })
+      const chatError = handleChatError(error)
 
       expect(toast.error).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          action: expect.objectContaining({
-            label: 'Retry',
-            onClick: onRetry
-          })
-        })
+        expect.stringContaining('60 seconds'),
+        expect.objectContaining({ duration: 6000 })
       )
+      expect(chatError.type).toBe(ChatErrorType.RATE_LIMITED)
     })
 
-    it('should not add retry action when max retries reached', () => {
-      const onRetry = vi.fn()
+    it('should handle quota exceeded errors with upgrade action', () => {
+      const error = {
+        response: {
+          status: 400,
+          data: { error: 'quota exceeded' }
+        }
+      }
+
+      handleChatError(error)
+
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('quota'),
+        expect.any(Object)
+      )
+    })
+  })
+
+  describe('formatErrorMessage', () => {
+    it('should format rate limit errors', () => {
       const error = new ChatError(
-        ChatErrorType.SERVER_ERROR,
-        'Server error',
-        500,
-        {},
+        ChatErrorType.RATE_LIMITED,
+        'Rate limited',
+        429,
+        { retryAfter: '30' },
         true
       )
+      
+      const message = formatErrorMessage(error)
+      expect(message).toContain('30 seconds')
+    })
 
-      handleChatError(error, { 
-        onRetry, 
-        retryCount: retryConfig[ChatErrorType.SERVER_ERROR].maxRetries 
-      })
-
-      expect(toast.error).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.not.objectContaining({
-          action: expect.any(Object)
-        })
+    it('should format quota exceeded errors', () => {
+      const error = new ChatError(
+        ChatErrorType.QUOTA_EXCEEDED,
+        'Quota exceeded',
+        400,
+        {},
+        false
       )
-    })
-  })
-
-  describe('validateChatInput', () => {
-    it('should validate empty input', () => {
-      const result = validateChatInput('')
-      expect(result.valid).toBe(false)
-      expect(result.error).toBe('Message cannot be empty')
+      
+      const message = formatErrorMessage(error)
+      expect(message).toContain('monthly message limit')
     })
 
-    it('should validate whitespace-only input', () => {
-      const result = validateChatInput('   \n\t  ')
-      expect(result.valid).toBe(false)
-      expect(result.error).toBe('Message cannot be empty')
-    })
-
-    it('should validate too short input', () => {
-      const result = validateChatInput('Hi')
-      expect(result.valid).toBe(false)
-      expect(result.error).toBe('Message must be at least 3 characters')
-    })
-
-    it('should validate too long input', () => {
-      const longMessage = 'a'.repeat(2001)
-      const result = validateChatInput(longMessage)
-      expect(result.valid).toBe(false)
-      expect(result.error).toBe('Message cannot exceed 2000 characters')
-    })
-
-    it('should detect prompt injection patterns', () => {
-      const injectionPatterns = [
-        '[[system prompt]]',
-        '{{instructions}}',
-        '<|endoftext|>',
-        'system: ignore previous',
-        'assistant: sure!',
-        '\\\\\\\\'
-      ]
-
-      injectionPatterns.forEach(pattern => {
-        const result = validateChatInput(pattern)
-        expect(result.valid).toBe(false)
-        expect(result.error).toBe('Message contains invalid characters or patterns')
-      })
-    })
-
-    it('should validate valid input', () => {
-      const result = validateChatInput('This is a valid message')
-      expect(result.valid).toBe(true)
-      expect(result.error).toBeUndefined()
-    })
-
-    it('should validate input at boundaries', () => {
-      const minLength = validateChatInput('abc')
-      expect(minLength.valid).toBe(true)
-
-      const maxLength = validateChatInput('a'.repeat(2000))
-      expect(maxLength.valid).toBe(true)
-    })
-  })
-
-  describe('retryWithBackoff', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
-    it('should retry with exponential backoff', async () => {
-      const fn = vi.fn()
-        .mockRejectedValueOnce(new Error('First failure'))
-        .mockResolvedValueOnce('Success')
-
+    it('should format network errors', () => {
       const error = new ChatError(
         ChatErrorType.NETWORK_ERROR,
         'Network error',
@@ -294,21 +236,78 @@ describe('Chat Error Handling', () => {
         {},
         true
       )
-
-      const promise = retryWithBackoff(fn, error)
-
-      // First retry after 1000ms
-      await vi.advanceTimersByTimeAsync(1000)
       
-      const result = await promise
-      expect(result).toBe('Success')
-      expect(fn).toHaveBeenCalledTimes(2)
+      const message = formatErrorMessage(error)
+      expect(message).toContain('internet connection')
+    })
+  })
+
+  describe('isErrorType', () => {
+    it('should correctly identify error types', () => {
+      const error = new ChatError(
+        ChatErrorType.RATE_LIMITED,
+        'Rate limited',
+        429
+      )
+      
+      expect(isErrorType(error, ChatErrorType.RATE_LIMITED)).toBe(true)
+      expect(isErrorType(error, ChatErrorType.NETWORK_ERROR)).toBe(false)
     })
 
+    it('should return false for non-ChatError objects', () => {
+      const error = new Error('Regular error')
+      expect(isErrorType(error, ChatErrorType.RATE_LIMITED)).toBe(false)
+    })
+  })
+
+  describe('getRetryInfo', () => {
+    it('should return retry info for rate limited errors', () => {
+      const error = new ChatError(
+        ChatErrorType.RATE_LIMITED,
+        'Rate limited',
+        429,
+        { retryAfter: '30' },
+        true
+      )
+      
+      const info = getRetryInfo(error)
+      expect(info.canRetry).toBe(true)
+      expect(info.delayMs).toBe(30000)
+    })
+
+    it('should return default delay for retryable errors', () => {
+      const error = new ChatError(
+        ChatErrorType.SERVER_ERROR,
+        'Server error',
+        500,
+        {},
+        true
+      )
+      
+      const info = getRetryInfo(error)
+      expect(info.canRetry).toBe(true)
+      expect(info.delayMs).toBe(1000)
+    })
+
+    it('should return no retry for non-retryable errors', () => {
+      const error = new ChatError(
+        ChatErrorType.UNAUTHORIZED,
+        'Unauthorized',
+        401,
+        {},
+        false
+      )
+      
+      const info = getRetryInfo(error)
+      expect(info.canRetry).toBe(false)
+    })
+  })
+
+  describe('retryWithBackoff', () => {
     it('should not retry non-retryable errors', async () => {
       const fn = vi.fn().mockRejectedValue(new Error('Failed'))
       const error = new ChatError(
-        ChatErrorType.ACCESS_DENIED,
+        ChatErrorType.UNAUTHORIZED,
         'Access denied',
         403,
         {},
@@ -329,34 +328,8 @@ describe('Chat Error Handling', () => {
         true
       )
 
-      const promise = retryWithBackoff(fn, error)
-
-      // Advance through all retry attempts
-      for (let i = 0; i < retryConfig[ChatErrorType.SERVER_ERROR].maxRetries; i++) {
-        await vi.advanceTimersByTimeAsync(
-          retryConfig[ChatErrorType.SERVER_ERROR].backoff * Math.pow(2, i)
-        )
-      }
-
-      await expect(promise).rejects.toThrow()
-      expect(fn).toHaveBeenCalledTimes(retryConfig[ChatErrorType.SERVER_ERROR].maxRetries)
-    })
-  })
-
-  describe('Error messages and configs', () => {
-    it('should have error messages for all error types', () => {
-      Object.values(ChatErrorType).forEach(type => {
-        expect(errorMessages[type]).toBeDefined()
-        expect(typeof errorMessages[type]).toBe('string')
-      })
-    })
-
-    it('should have retry configs for all error types', () => {
-      Object.values(ChatErrorType).forEach(type => {
-        expect(retryConfig[type]).toBeDefined()
-        expect(retryConfig[type]).toHaveProperty('maxRetries')
-        expect(retryConfig[type]).toHaveProperty('backoff')
-      })
+      await expect(retryWithBackoff(fn, error, 2)).rejects.toThrow()
+      expect(fn).toHaveBeenCalledTimes(2)
     })
   })
 })

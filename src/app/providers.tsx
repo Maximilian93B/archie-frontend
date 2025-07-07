@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/auth-context';
+import { SubscriptionProvider } from '@/providers/subscription-provider';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -30,16 +31,18 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {children}
-        
-        {/* Toast notifications */}
-        <Toaster />
-        
-        {/* React Query Devtools */}
-        <ReactQueryDevtools 
-          initialIsOpen={false} 
-          position="bottom-right"
-        />
+        <SubscriptionProvider>
+          {children}
+          
+          {/* Toast notifications */}
+          <Toaster />
+          
+          {/* React Query Devtools */}
+          <ReactQueryDevtools 
+            initialIsOpen={false} 
+            position="bottom-right"
+          />
+        </SubscriptionProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

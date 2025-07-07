@@ -56,22 +56,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
           }
           
-          // Fetch subscription status
-          try {
-            const subscriptionStore = useSubscriptionStore.getState();
-            await subscriptionStore.fetchStatus();
-            
-            // Set subscription cookies for middleware
-            const subscription = subscriptionStore.subscription;
-            if (subscription) {
-              Cookies.set('has_subscription', String(subscription.isActive), { expires: 1 });
-              Cookies.set('is_trialing', String(subscription.isTrialing), { expires: 1 });
-            } else {
-              Cookies.set('has_subscription', 'false', { expires: 1 });
-              Cookies.set('is_trialing', 'false', { expires: 1 });
-            }
-          } catch (subError) {
-            console.warn('Failed to fetch subscription status on init:', subError);
+          // Set subscription cookies for middleware from cached data if available
+          // NOTE: We use getState() here instead of the hook because we're inside useEffect
+          // This is only for cookie management and doesn't bypass the centralized architecture
+          const subscriptionStore = useSubscriptionStore.getState();
+          const subscription = subscriptionStore.status;
+          if (subscription) {
+            Cookies.set('has_subscription', String(subscription.isActive), { expires: 1 });
+            Cookies.set('is_trialing', String(subscription.isTrialing), { expires: 1 });
           }
         }
       } catch (error) {
@@ -93,8 +85,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setIsLoading(true);
       
+      // Trim credentials to remove any accidental whitespace
+      const trimmedCredentials = {
+        ...credentials,
+        subdomain: credentials.subdomain?.trim(),
+        email: credentials.email?.trim(),
+        password: credentials.password?.trim(),
+      };
+      
       // Login through backend API
-      const response = await apiClient.login(credentials);
+      const response = await apiClient.login(trimmedCredentials);
       
       setUser(response.user);
       setToken(response.token);
@@ -108,25 +108,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
       
-      // Fetch subscription status after login
-      try {
-        const subscriptionStore = useSubscriptionStore.getState();
-        await subscriptionStore.fetchStatus();
-        
-        // Set subscription cookies for middleware
-        const status = subscriptionStore.status;
-        if (status) {
-          const hasActiveSubscription = status.status === 'active' || status.status === 'trialing';
-          const isTrialing = status.trial === true;
-          Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
-          Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
-        } else {
-          Cookies.set('has_subscription', 'false', { expires: 1 });
-          Cookies.set('is_trialing', 'false', { expires: 1 });
-        }
-      } catch (subError) {
-        console.warn('Failed to fetch subscription status:', subError);
-        // Don't fail login if subscription check fails
+      // Set subscription cookies for middleware from cached data if available
+      // NOTE: We use getState() here instead of the hook because we're inside an async function
+      // This is only for cookie management and doesn't bypass the centralized architecture
+      const subscriptionStore = useSubscriptionStore.getState();
+      const status = subscriptionStore.status;
+      if (status) {
+        const hasActiveSubscription = status.isActive === true;
+        const isTrialing = status.isTrialing === true;
+        Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
+        Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
       }
       
       toast({
@@ -205,6 +196,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.clearToken();
       
       // Clear subscription state and cookies
+      // NOTE: We use getState() here for cache clearing during logout
+      // This is a legitimate use case and doesn't bypass the centralized architecture
       const subscriptionStore = useSubscriptionStore.getState();
       subscriptionStore.clearCache();
       Cookies.remove('has_subscription');
@@ -243,21 +236,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
     
-    // Fetch subscription status after setting auth
-    try {
-      const subscriptionStore = useSubscriptionStore.getState();
-      await subscriptionStore.fetchStatus();
-      
-      // Set subscription cookies for middleware
-      const status = subscriptionStore.status;
-      if (status) {
-        const hasActiveSubscription = status.status === 'active' || status.status === 'trialing';
-        const isTrialing = status.trial === true;
-        Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
-        Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
-      }
-    } catch (subError) {
-      console.warn('Failed to fetch subscription status in setAuth:', subError);
+    // Set subscription cookies from cached data if available
+    // Note: SubscriptionProvider will handle fetching the actual data
+    const subscriptionStore = useSubscriptionStore.getState();
+    const status = subscriptionStore.status;
+    if (status) {
+      const hasActiveSubscription = status.status === 'active' || status.status === 'trialing';
+      const isTrialing = status.isTrialing === true;
+      Cookies.set('has_subscription', String(hasActiveSubscription), { expires: 1 });
+      Cookies.set('is_trialing', String(isTrialing), { expires: 1 });
     }
   };
 

@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { searchAPI, type EnhancedSearchOptions, type EnhancedSearchResponse } from '@/lib/api/search';
 import { toast } from 'react-hot-toast';
 import type { HybridSearchResult, SearchResult } from '@/types';
 
@@ -9,6 +10,7 @@ export const searchKeys = {
   intelligent: (query: string, limit?: number) => [...searchKeys.all, 'intelligent', query, limit] as const,
   hybrid: (params: any) => [...searchKeys.all, 'hybrid', params] as const,
   suggestions: (query: string) => [...searchKeys.all, 'suggestions', query] as const,
+  enhanced: (options: EnhancedSearchOptions) => [...searchKeys.all, 'enhanced', options] as const,
 };
 
 // ================================
@@ -35,6 +37,37 @@ export function useSearchSuggestions(partialQuery: string, enabled = true) {
     gcTime: 3 * 60 * 1000, // 3 minutes
     retry: false, // Don't retry suggestions
   });
+}
+
+export function useEnhancedSearch(
+  options: EnhancedSearchOptions,
+  enabled = true
+) {
+  return useQuery<EnhancedSearchResponse>({
+    queryKey: searchKeys.enhanced(options),
+    queryFn: () => searchAPI.enhancedSearch(options),
+    enabled: enabled && options.query.length >= 2,
+    staleTime: 2 * 60 * 1000, // 2 minutes - enhanced search results are more stable
+    gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
+    retry: 1,
+  });
+}
+
+export function useEnhancedSearchWithDefaults(
+  query: string,
+  overrides?: Partial<EnhancedSearchOptions>,
+  enabled = true
+) {
+  const defaultOptions: EnhancedSearchOptions = {
+    query,
+    semantic: true,
+    includeAI: true,
+    maxResults: 50,
+    relevanceThreshold: 0.3,
+    ...overrides,
+  };
+  
+  return useEnhancedSearch(defaultOptions, enabled);
 }
 
 // ================================
@@ -190,6 +223,95 @@ export function useSearchResultActions() {
           .replace(/_/g, ' ')
           .replace(/\b\w/g, l => l.toUpperCase());
       });
+    },
+  };
+}
+
+// ================================
+// 🧠 Enhanced Search Utilities
+// ================================
+
+export function useEnhancedSearchActions() {
+  const { highlightText, getRelevanceColor } = useSearchResultActions();
+  
+  return {
+    // Format relevance score as percentage
+    formatRelevanceScore: (score: number) => {
+      return `${Math.round(score * 100)}%`;
+    },
+    
+    // Get confidence level for matching sections
+    getConfidenceLevel: (confidence: number): 'high' | 'medium' | 'low' => {
+      if (confidence >= 0.8) return 'high';
+      if (confidence >= 0.6) return 'medium';
+      return 'low';
+    },
+    
+    // Get confidence color for UI
+    getConfidenceColor: (confidence: number) => {
+      const level = confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low';
+      switch (level) {
+        case 'high': return 'text-green-600';
+        case 'medium': return 'text-yellow-600';
+        case 'low': return 'text-orange-600';
+      }
+    },
+    
+    // Format query analysis for display
+    formatQueryAnalysis: (analysis?: EnhancedSearchResponse['queryAnalysis']) => {
+      if (!analysis) return null;
+      
+      return {
+        intent: analysis.intent.charAt(0).toUpperCase() + analysis.intent.slice(1),
+        entities: analysis.entities.map(e => e.charAt(0).toUpperCase() + e.slice(1)),
+        themes: analysis.themes.map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+        refinements: analysis.suggestedRefinements || [],
+      };
+    },
+    
+    // Get section type icon
+    getSectionTypeIcon: (type: string) => {
+      switch (type) {
+        case 'heading': return '📄';
+        case 'paragraph': return '📝';
+        case 'list': return '📋';
+        case 'table': return '📊';
+        default: return '📄';
+      }
+    },
+    
+    // Process highlighted content for safe HTML rendering
+    processHighlightedContent: (content?: string, query?: string) => {
+      if (!content) return '';
+      
+      // First escape HTML to prevent XSS
+      const escaped = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+      
+      // Then apply highlighting if query provided
+      if (query) {
+        return highlightText(escaped, query);
+      }
+      
+      return escaped;
+    },
+    
+    // Group results by relevance tiers
+    groupResultsByRelevance: (results: EnhancedSearchResponse['results']) => {
+      const high = results.filter(r => r.relevanceScore >= 0.8);
+      const medium = results.filter(r => r.relevanceScore >= 0.5 && r.relevanceScore < 0.8);
+      const low = results.filter(r => r.relevanceScore < 0.5);
+      
+      return { high, medium, low };
+    },
+    
+    // Check if enhanced features are available
+    hasAIEnhancements: (result: EnhancedSearchResponse['results'][0]) => {
+      return !!(result.aiSummary || (result.matchingSections && result.matchingSections.length > 0));
     },
   };
 }

@@ -1,7 +1,7 @@
 import { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { csrfTokenManager } from './csrf';
 import { APIErrorHandler } from './error-handler';
 import { DEFAULT_RETRY_CONFIG, RequestConfig } from './request-config';
+import { csrfTokenManager } from './csrf';
 
 export class InterceptorManager {
   private client: AxiosInstance;
@@ -45,16 +45,21 @@ export class InterceptorManager {
           : null;
         if (tenantSubdomain) {
           config.headers['X-Tenant-Subdomain'] = tenantSubdomain;
+          
+          // Debug log in development
+          if (process.env.NODE_ENV === 'development' && typeof tenantSubdomain !== 'string') {
+            console.warn('[API] Invalid tenant subdomain type:', typeof tenantSubdomain, tenantSubdomain);
+          }
         }
 
         // Add CSRF token for state-changing requests
-        if (!requestConfig?.skipCSRF && csrfTokenManager.requiresCSRF(config.method || 'GET')) {
+        if (csrfTokenManager.requiresToken(config.method || '')) {
           try {
-            const csrfToken = await csrfTokenManager.getToken();
+            const csrfToken = await csrfTokenManager.get();
             config.headers['X-CSRF-Token'] = csrfToken;
           } catch (error) {
-            console.warn('Failed to get CSRF token:', error);
-            // Continue without CSRF token - let the server decide
+            console.error('[API] Failed to get CSRF token:', error);
+            // Continue without CSRF token - let the server reject if needed
           }
         }
 
@@ -109,6 +114,26 @@ export class InterceptorManager {
       async (error) => {
         const originalRequest = error.config;
         const requestConfig = originalRequest?.requestConfig as RequestConfig;
+
+        // Handle 403 CSRF Token errors
+        if (error.response?.status === 403 && 
+            (error.response?.data?.code === 'CSRF_TOKEN_REQUIRED' ||
+             error.response?.data?.error?.includes('CSRF'))) {
+          
+          // Clear invalid token and retry once
+          if (!originalRequest._csrfRetry) {
+            originalRequest._csrfRetry = true;
+            csrfTokenManager.clear();
+            
+            try {
+              const newToken = await csrfTokenManager.get();
+              originalRequest.headers['X-CSRF-Token'] = newToken;
+              return this.client.request(originalRequest);
+            } catch (csrfError) {
+              console.error('[API] Failed to refresh CSRF token:', csrfError);
+            }
+          }
+        }
 
         // Handle 401 Unauthorized
         if (error.response?.status === 401 && !originalRequest._retry) {

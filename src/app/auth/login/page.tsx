@@ -51,7 +51,13 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setIsLoading(true)
-      await login(data)
+      // Trim all form fields to remove any accidental whitespace
+      const trimmedData = {
+        subdomain: data.subdomain.trim(),
+        email: data.email.trim(),
+        password: data.password.trim(),
+      }
+      await login(trimmedData)
       router.push('/dashboard')
     } catch (error) {
       // Error is handled by the auth context

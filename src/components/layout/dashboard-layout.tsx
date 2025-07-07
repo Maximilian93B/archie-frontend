@@ -20,6 +20,7 @@ import {
   Clock,
   Star,
   Trash2,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -36,6 +37,7 @@ const navigation = [
   { name: 'All Documents', href: '/dashboard/documents', icon: FileText },
   { name: 'Recent', href: '/dashboard/recent', icon: Clock },
   { name: 'Starred', href: '/dashboard/starred', icon: Star },
+  { name: 'AI Search', href: '/dashboard/search/enhanced', icon: Sparkles },
   { name: 'Chat Sessions', href: '/dashboard/chat', icon: MessageSquare },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
 ]
@@ -49,30 +51,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const { status, checkQuota } = useSubscription()
-  const [hasLimitWarning, setHasLimitWarning] = useState(false)
+  const { status, getRemainingQuota } = useSubscription()
   
-  useEffect(() => {
-    // Check for approaching limits
-    const checkLimits = async () => {
-      try {
-        const quotaChecks = await Promise.all([
-          checkQuota('documents', { showError: false, showWarning: false }),
-          checkQuota('storage', { showError: false, showWarning: false }),
-          checkQuota('ai_credits', { showError: false, showWarning: false })
-        ])
-        
-        // If any quota check returns false, show warning
-        const hasWarning = quotaChecks.some(allowed => !allowed)
-        
-        setHasLimitWarning(hasWarning)
-      } catch (error) {
-        console.error('Failed to check quotas:', error)
-      }
-    }
-    
-    checkLimits()
-  }, [checkQuota])
+  // Calculate limit warning based on cached quota data
+  const hasLimitWarning = (() => {
+    const quotas = ['documents', 'storage', 'ai_credits'] as const
+    return quotas.some(feature => {
+      const quota = getRemainingQuota(feature)
+      return quota && quota.percentage >= 90 && !quota.isUnlimited
+    })
+  })()
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">

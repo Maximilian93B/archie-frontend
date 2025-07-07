@@ -1,24 +1,23 @@
-import { useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useSubscriptionStore } from '@/store/subscription-store'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionProvider } from '@/providers/subscription-provider'
 import { toast } from 'react-hot-toast'
 import type { QuotaCheck, FeatureName } from '@/types/subscription'
 
 /**
  * Unified hook for subscription management
  * Handles quota checking, feature gating, and checkout flows
+ * 
+ * Note: Subscription data is loaded centrally by SubscriptionProvider.
+ * This hook provides access to the cached data and actions.
  */
 export function useSubscription() {
   const store = useSubscriptionStore()
   const { user } = useAuth()
+  const { isInitialized, isInitializing, error: providerError } = useSubscriptionProvider()
 
-  // Fetch status on mount and when user changes
-  useEffect(() => {
-    if (user) {
-      store.fetchStatus()
-      store.fetchPlans()
-    }
-  }, [user?.id])
+  // No longer fetch on mount - SubscriptionProvider handles this
 
   // Check quota with user-friendly error handling
   const checkQuota = useCallback(async (
@@ -131,8 +130,9 @@ export function useSubscription() {
     status: store.status,
     plans: store.plans,
     currentPlan: store.getCurrentPlan(),
-    isLoading: store.isLoading,
-    error: store.error,
+    isLoading: store.isLoading || isInitializing,
+    error: store.error || providerError?.message,
+    isInitialized,
     
     // Computed
     hasActiveSubscription: store.hasActiveSubscription(),

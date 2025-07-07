@@ -22,7 +22,8 @@
       "Bash(pkill:*)",
       "Bash(true)",
       "Bash(npx eslint:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }

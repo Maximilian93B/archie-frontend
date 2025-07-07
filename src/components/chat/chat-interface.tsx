@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useChatStoreSafe } from '@/hooks/use-chat-store-safe'
 import type { ChatMessage } from '@/store/chat-store'
-import { useAskQuestion } from '@/hooks/queries/chat.queries'
-import { toast } from 'react-hot-toast'
+import { useAskQuestion, useDeleteChatSession, useUpdateSessionName } from '@/hooks/queries/chat.queries'
+import toast from 'react-hot-toast'
 import { ArrowLeft, MoreVertical, Trash2, Edit2, Settings, FileText } from 'lucide-react'
 import {
   DropdownMenu,
@@ -38,7 +38,8 @@ export function ChatInterface({
   const {
     currentSession,
     setCurrentSession,
-    isAsking
+    isAsking,
+    updateSession
   } = useChatStoreSafe()
 
   // Document context state
@@ -74,52 +75,38 @@ export function ChatInterface({
 
     // Remove failed message
     const updatedMessages = currentSession.messages.filter(m => m.id !== messageId)
-    useChatStore.getState().updateSession(sessionId, { messages: updatedMessages })
+    updateSession(sessionId, { messages: updatedMessages })
 
     // Resend
     await handleSendMessage(message.content)
   }
 
+  const deleteSession = useDeleteChatSession()
+
   const handleDeleteSession = async () => {
     if (!confirm('Are you sure you want to delete this chat session?')) return
 
     try {
-      await apiClient.delete(`/api/v1/chat/sessions/${sessionId}`)
-      toast({
-        title: 'Success',
-        description: 'Chat session deleted'
-      })
+      await deleteSession.mutateAsync(sessionId)
+      toast.success('Chat session deleted')
       onBack?.()
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to delete session',
-        variant: 'destructive'
-      })
+      toast.error('Failed to delete session')
     }
   }
+
+  const updateSessionName = useUpdateSessionName()
 
   const handleRenameSession = async () => {
     const newName = prompt('Enter new session name:', currentSession?.sessionName)
     if (!newName || newName === currentSession?.sessionName) return
 
     try {
-      await apiClient.put(`/api/v1/chat/sessions/${sessionId}/name`, {
-        name: newName
-      })
-      
-      useChatStore.getState().updateSession(sessionId, { sessionName: newName })
-      
-      toast({
-        title: 'Success',
-        description: 'Session renamed'
-      })
+      await updateSessionName.mutateAsync({ sessionId, sessionName: newName })
+      updateSession(sessionId, { sessionName: newName })
+      toast.success('Session renamed')
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to rename session',
-        variant: 'destructive'
-      })
+      toast.error('Failed to rename session')
     }
   }
 
@@ -301,7 +288,7 @@ export function ChatInterfaceMobile({
   onBack
 }: ChatInterfaceProps) {
   // Similar logic but optimized for mobile
-  const { currentSession, isAsking } = useChatStore()
+  const { currentSession, isAsking } = useChatStoreSafe()
 
   if (!currentSession) {
     return (

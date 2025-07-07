@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Clock, Star, FileText, Loader2 } from 'lucide-react'
+import { Search, X, Clock, Star, FileText, Loader2, Sparkles } from 'lucide-react'
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { useDebounce } from '@/hooks/use-debounce'
 import { searchAPI, type SearchSuggestion } from '@/lib/api/search'
@@ -63,7 +63,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
     }
   }
 
-  const handleSearch = (searchQuery: string) => {
+  const handleSearch = (searchQuery: string, useEnhanced = false) => {
     if (!searchQuery.trim()) return
     
     // Save to recent searches (handled by backend)
@@ -71,7 +71,8 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
     setQuery('')
     
     // Navigate to search results page
-    router.push(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`)
+    const searchPath = useEnhanced ? '/dashboard/search/enhanced' : '/dashboard/search'
+    router.push(`${searchPath}?q=${encodeURIComponent(searchQuery)}`)
   }
 
   const handleSelect = (suggestion: SearchSuggestion) => {
@@ -156,6 +157,16 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
 
             {/* Quick Actions */}
             <CommandGroup heading="Quick Actions">
+              <CommandItem
+                onSelect={() => {
+                  setOpen(false)
+                  router.push('/dashboard/search/enhanced')
+                }}
+                className="flex items-center gap-2"
+              >
+                <Sparkles className="h-4 w-4 text-purple-600" />
+                AI-Enhanced Search
+              </CommandItem>
               <CommandItem
                 onSelect={() => {
                   setOpen(false)

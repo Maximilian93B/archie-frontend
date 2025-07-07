@@ -31,6 +31,5 @@ export interface RequestConfig {
   retry?: boolean | Partial<RetryConfig>;
   silent?: boolean; // Don't show error toast
   skipAuth?: boolean; // Skip auth headers
-  skipCSRF?: boolean; // Skip CSRF token
   signal?: AbortSignal; // For request cancellation
 }

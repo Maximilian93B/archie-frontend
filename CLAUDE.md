@@ -350,3 +350,5 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 - Emphasizes type safety, performance, and scalable design patterns
 - Added memory tracking for Stripe UI Components file at @ARCHIVUS_STRIPE_UI_COMPONENTS.md
 - Added memory tracking for Auto-Tag Feature context file at @src/Auto-Tag-Feature-context.md
+- Added memory tracking for Roadmap documentation at @ARCHIVUS_DEVELOPMENT_ROADMAP.md
+- Added memory tracking for Claude Code baseline configuration

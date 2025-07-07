@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Brain, Upload, Search, BarChart3, FileText, MessageSquare, HardDrive, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { WorkspaceIntelligence } from '@/components/dashboard/workspace-intelligence';
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -89,6 +90,9 @@ export default function DashboardPage() {
           );
         })}
       </div>
+
+      {/* Workspace Intelligence */}
+      <WorkspaceIntelligence />
 
       {/* Quick Actions and Recent Documents */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">

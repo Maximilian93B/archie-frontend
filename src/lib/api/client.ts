@@ -1,8 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { toast } from '@/hooks/use-toast';
 import { InterceptorManager } from './interceptors';
-import { csrfTokenManager } from './csrf';
 import { DEFAULT_TIMEOUTS, RequestConfig } from './request-config';
+import { csrfTokenManager } from './csrf';
 import type {
   LoginCredentials,
   LoginResponse,
@@ -40,7 +40,7 @@ class ArchivusAPIClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      withCredentials: true, // Enable cookies for CSRF
+      withCredentials: true, // Enable cookies for refresh tokens
     });
 
     this.interceptorManager = new InterceptorManager(
@@ -78,7 +78,7 @@ class ArchivusAPIClient {
       localStorage.removeItem('tenant_subdomain');
     }
     
-    csrfTokenManager.clearToken();
+    csrfTokenManager.clear();
   }
 
   private scheduleTokenRefresh() {
@@ -164,8 +164,7 @@ class ArchivusAPIClient {
     const response = await this.post<LoginResponse>('/api/v1/auth/login', credentials, {
       requestConfig: {
         timeout: DEFAULT_TIMEOUTS.auth,
-        skipAuth: true,
-        skipCSRF: true, // Login doesn't need CSRF
+        skipAuth: true
       }
     });
     
@@ -175,7 +174,7 @@ class ArchivusAPIClient {
       localStorage.setItem('refresh_token', response.refresh_token);
       
       // Store subdomain - prefer response subdomain over input
-      const tenantSubdomain = response.user?.tenant_subdomain || subdomain;
+      const tenantSubdomain = response.user?.tenant_subdomain || credentials.subdomain;
       if (tenantSubdomain) {
         localStorage.setItem('tenant_subdomain', tenantSubdomain);
       }
@@ -192,8 +191,7 @@ class ArchivusAPIClient {
     const response = await this.post<LoginResponse>('/api/v1/auth/register', data, {
       requestConfig: {
         timeout: DEFAULT_TIMEOUTS.auth,
-        skipAuth: true,
-        skipCSRF: true, // Registration doesn't need CSRF
+        skipAuth: true
       }
     });
     
@@ -508,6 +506,10 @@ class ArchivusAPIClient {
 
   async getSubscriptionUsage(): Promise<any> {
     return this.get('/api/v1/subscription/usage');
+  }
+
+  async getSubscriptionSummary(): Promise<any> {
+    return this.get('/api/v1/subscription/summary');
   }
 
   async createCheckoutSession(data: any): Promise<any> {

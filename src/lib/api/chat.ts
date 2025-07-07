@@ -1,92 +1,38 @@
 import { apiClient } from './client'
-import type { ChatSession, ChatMessage } from '@/store/chat-store'
 import { handleChatError, retryWithBackoff, ChatError, ChatErrorType } from '@/lib/chat-errors'
+import type {
+  ChatSession,
+  ChatMessage,
+  CreateSessionRequest,
+  AskQuestionRequest,
+  AskQuestionResponseExtended,
+  UpdateSessionNameRequest,
+  GetSessionsParams,
+  SessionListResponse,
+  SearchParams,
+  SearchSessionsResponse,
+  SuggestionsRequest,
+  SuggestionsResponse,
+  ChatStatsResponse,
+  SessionSummaryResponse,
+  PaginationParams,
+  FrontendChatSession,
+  FrontendChatMessage
+} from '@/types/chat'
 
-// Types based on backend API endpoints
-export interface CreateSessionRequest {
-  document_id: string
-  session_name?: string
-}
-
-export interface CreateSessionResponse {
-  id: string
-  document_id: string
-  user_id: string
-  session_name: string | null
-  messages: any[]
-  context: Record<string, any>
-  is_active: boolean
-  total_messages: number
-  last_message_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface SessionListResponse {
-  sessions: CreateSessionResponse[]
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
-}
-
-export interface AskQuestionRequest {
-  question: string
-}
-
-export interface AskQuestionResponse {
-  session_id: string
-  message: {
-    id: string
-    role: 'assistant' | 'user'
-    content: string
-    claude_model: string
-    token_count: number
-    created_at: string
-  }
-  claude_model_used: string
-  token_usage: {
-    input_tokens: number
-    output_tokens: number
-    total_tokens: number
-  }
-}
-
-export interface UpdateSessionNameRequest {
-  session_name: string
-}
-
-export interface ChatStatsResponse {
-  total_sessions: number
-  total_messages: number
-  active_sessions: number
-  avg_messages_per_session: number
-  total_tokens_used: number
-  last_activity: string
-}
-
-export interface SearchSessionsParams {
-  q: string
-  limit?: number
-  document_id?: string
-}
-
-export interface SearchSessionsResponse {
-  sessions: CreateSessionResponse[]
-  total: number
-  query: string
-}
-
-export interface GenerateSuggestionsRequest {
-  document_id?: string
-  recent_messages?: string[]
-  context?: string
-}
-
-export interface GenerateSuggestionsResponse {
-  suggestions: string[]
-  context_used: string
-  processing_time_ms: number
+// Re-export types for backward compatibility
+export type {
+  CreateSessionRequest,
+  ChatSession as CreateSessionResponse,
+  AskQuestionRequest,
+  AskQuestionResponseExtended as AskQuestionResponse,
+  UpdateSessionNameRequest,
+  SessionListResponse,
+  ChatStatsResponse,
+  SearchParams as SearchSessionsParams,
+  SearchSessionsResponse,
+  SuggestionsRequest as GenerateSuggestionsRequest,
+  SuggestionsResponse as GenerateSuggestionsResponse
 }
 
 /**
@@ -127,7 +73,7 @@ export const chatAPI = {
   /**
    * Create a new chat session for a document
    */
-  async createSession(request: CreateSessionRequest): Promise<CreateSessionResponse> {
+  async createSession(request: CreateSessionRequest): Promise<ChatSession> {
     return withChatErrorHandling(
       () => apiClient.post('/api/v1/chat/sessions', request),
       { operationName: 'createSession' }
@@ -137,18 +83,16 @@ export const chatAPI = {
   /**
    * Get all chat sessions for the current user
    */
-  async getSessions(params: {
-    page?: number
-    page_size?: number
-    document_id?: string
-  } = {}): Promise<SessionListResponse> {
+  async getSessions(params: GetSessionsParams = {}): Promise<SessionListResponse> {
     return withChatErrorHandling(
       () => {
         const searchParams = new URLSearchParams()
         
         if (params.page) searchParams.append('page', String(params.page))
-        if (params.page_size) searchParams.append('page_size', String(params.page_size))
-        if (params.document_id) searchParams.append('document_id', params.document_id)
+        if (params.limit) searchParams.append('limit', String(params.limit))
+        if (params.is_active !== undefined) searchParams.append('is_active', String(params.is_active))
+        if (params.sort_by) searchParams.append('sort_by', params.sort_by)
+        if (params.order) searchParams.append('order', params.order)
         
         const query = searchParams.toString()
         return apiClient.get(`/api/v1/chat/sessions${query ? `?${query}` : ''}`)
@@ -160,11 +104,7 @@ export const chatAPI = {
   /**
    * Get a specific chat session by ID with optional pagination
    */
-  async getSession(sessionId: string, params?: {
-    page?: number
-    limit?: number
-    offset?: number
-  }): Promise<CreateSessionResponse> {
+  async getSession(sessionId: string, params?: PaginationParams): Promise<ChatSession> {
     return withChatErrorHandling(
       () => {
         const searchParams = new URLSearchParams()
@@ -183,9 +123,9 @@ export const chatAPI = {
   /**
    * Update session name
    */
-  async updateSessionName(sessionId: string, request: UpdateSessionNameRequest): Promise<CreateSessionResponse> {
+  async updateSessionName(sessionId: string, request: UpdateSessionNameRequest): Promise<ChatSession> {
     return withChatErrorHandling(
-      () => apiClient.put(`/api/v1/chat/sessions/${sessionId}/name`, request),
+      () => apiClient.put(`/api/v1/chat/sessions/${sessionId}/name`, { session_name: request.name }),
       { operationName: 'updateSessionName' }
     )
   },
@@ -203,7 +143,7 @@ export const chatAPI = {
   /**
    * Deactivate a chat session (soft delete)
    */
-  async deactivateSession(sessionId: string): Promise<CreateSessionResponse> {
+  async deactivateSession(sessionId: string): Promise<ChatSession> {
     return withChatErrorHandling(
       () => apiClient.put(`/api/v1/chat/sessions/${sessionId}/deactivate`, {}),
       { operationName: 'deactivateSession' }
@@ -214,7 +154,7 @@ export const chatAPI = {
    * Ask a question in a chat session
    * Special handling for rate limits and validation
    */
-  async askQuestion(sessionId: string, request: AskQuestionRequest): Promise<AskQuestionResponse> {
+  async askQuestion(sessionId: string, request: AskQuestionRequest): Promise<AskQuestionResponseExtended> {
     return withChatErrorHandling(
       () => apiClient.post(`/api/v1/chat/sessions/${sessionId}/ask`, request),
       { 
@@ -228,13 +168,7 @@ export const chatAPI = {
   /**
    * Generate session summary
    */
-  async summarizeSession(sessionId: string): Promise<{
-    session_id: string
-    summary: string
-    key_topics: string[]
-    message_count: number
-    created_at: string
-  }> {
+  async summarizeSession(sessionId: string): Promise<SessionSummaryResponse> {
     return withChatErrorHandling(
       () => apiClient.post(`/api/v1/chat/sessions/${sessionId}/summarize`, {}),
       { operationName: 'summarizeSession' }
@@ -244,7 +178,7 @@ export const chatAPI = {
   /**
    * Get all chat sessions for a specific document
    */
-  async getDocumentSessions(documentId: string): Promise<CreateSessionResponse[]> {
+  async getDocumentSessions(documentId: string): Promise<ChatSession[]> {
     return withChatErrorHandling(
       async () => {
         const response = await apiClient.get(`/api/v1/chat/documents/${documentId}/sessions`)
@@ -257,11 +191,11 @@ export const chatAPI = {
   /**
    * Search chat sessions
    */
-  async searchSessions(params: SearchSessionsParams): Promise<SearchSessionsResponse> {
+  async searchSessions(params: SearchParams): Promise<SearchSessionsResponse> {
     return withChatErrorHandling(
       () => {
         const searchParams = new URLSearchParams()
-        searchParams.append('q', params.q)
+        searchParams.append('query', params.query)
         if (params.limit) searchParams.append('limit', String(params.limit))
         if (params.document_id) searchParams.append('document_id', params.document_id)
         
@@ -274,7 +208,7 @@ export const chatAPI = {
   /**
    * Generate question suggestions based on context
    */
-  async generateSuggestions(request: GenerateSuggestionsRequest): Promise<GenerateSuggestionsResponse> {
+  async generateSuggestions(request: SuggestionsRequest): Promise<SuggestionsResponse> {
     return withChatErrorHandling(
       () => apiClient.post('/api/v1/chat/suggestions', request),
       { operationName: 'generateSuggestions' }
@@ -293,7 +227,7 @@ export const chatAPI = {
 }
 
 // Helper functions to transform backend responses to frontend types
-export const transformToFrontendSession = (backendSession: CreateSessionResponse): ChatSession => {
+export const transformToFrontendSession = (backendSession: ChatSession): FrontendChatSession => {
   return {
     id: backendSession.id,
     documentId: backendSession.document_id,
@@ -308,7 +242,7 @@ export const transformToFrontendSession = (backendSession: CreateSessionResponse
   }
 }
 
-export const transformToFrontendMessage = (backendMessage: AskQuestionResponse['message']): ChatMessage => {
+export const transformToFrontendMessage = (backendMessage: AskQuestionResponseExtended['message']): FrontendChatMessage => {
   return {
     id: backendMessage.id,
     role: backendMessage.role,

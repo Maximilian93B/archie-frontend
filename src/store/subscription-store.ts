@@ -44,6 +44,17 @@ const CACHE_DURATION = {
   quota: 60 * 1000          // 1 minute
 }
 
+// Track in-flight requests to prevent duplicates
+const inFlightRequests: {
+  status: Promise<void> | null
+  plans: Promise<void> | null
+  quotas: Map<string, Promise<QuotaCheck>>
+} = {
+  status: null,
+  plans: null,
+  quotas: new Map()
+}
+
 export const useSubscriptionStore = create<SubscriptionStore>()(
   persist(
     (set, get) => ({
@@ -59,7 +70,7 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
         quota: {}
       },
 
-      // Fetch subscription status
+      // Fetch subscription status with request deduplication
       fetchStatus: async () => {
         const now = Date.now()
         const lastChecked = get().lastFetched.status
@@ -69,29 +80,42 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
           return
         }
 
-        set({ isLoading: true, error: null })
-        try {
-          const status = await subscriptionAPI.getStatus()
-          set({ 
-            status, 
-            lastFetched: { ...get().lastFetched, status: now },
-            isLoading: false 
-          })
-        } catch (error: any) {
-          // Don't show error for 404s as we handle this in the API layer
-          if (error.response?.status !== 404) {
+        // If a request is already in-flight, return the existing promise
+        if (inFlightRequests.status) {
+          return inFlightRequests.status
+        }
+
+        // Create new request
+        inFlightRequests.status = (async () => {
+          set({ isLoading: true, error: null })
+          try {
+            const status = await subscriptionAPI.getStatus()
             set({ 
-              error: error instanceof Error ? error.message : 'Failed to fetch subscription status',
+              status, 
+              lastFetched: { ...get().lastFetched, status: now },
               isLoading: false 
             })
-          } else {
-            // For 404, we still got a default status from the API layer
-            set({ isLoading: false })
+          } catch (error: any) {
+            // Don't show error for 404s as we handle this in the API layer
+            if (error.response?.status !== 404) {
+              set({ 
+                error: error instanceof Error ? error.message : 'Failed to fetch subscription status',
+                isLoading: false 
+              })
+            } else {
+              // For 404, we still got a default status from the API layer
+              set({ isLoading: false })
+            }
+          } finally {
+            // Clear the promise when done
+            inFlightRequests.status = null
           }
-        }
+        })()
+
+        return inFlightRequests.status
       },
 
-      // Fetch available plans
+      // Fetch available plans with request deduplication
       fetchPlans: async () => {
         const now = Date.now()
         const lastChecked = get().lastFetched.plans
@@ -101,18 +125,31 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
           return
         }
 
-        try {
-          const plans = await subscriptionAPI.getPlans()
-          set({ 
-            plans,
-            lastFetched: { ...get().lastFetched, plans: now }
-          })
-        } catch (error) {
-          console.error('Failed to fetch plans:', error)
+        // If a request is already in-flight, return the existing promise
+        if (inFlightRequests.plans) {
+          return inFlightRequests.plans
         }
+
+        // Create new request
+        inFlightRequests.plans = (async () => {
+          try {
+            const plans = await subscriptionAPI.getPlans()
+            set({ 
+              plans,
+              lastFetched: { ...get().lastFetched, plans: now }
+            })
+          } catch (error) {
+            console.error('Failed to fetch plans:', error)
+          } finally {
+            // Clear the promise when done
+            inFlightRequests.plans = null
+          }
+        })()
+
+        return inFlightRequests.plans
       },
 
-      // Check quota with caching
+      // Check quota with caching and deduplication
       checkQuota: async (feature) => {
         const now = Date.now()
         const cached = get().quotaCache[feature]
@@ -123,43 +160,60 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
           return cached
         }
 
-        try {
-          // First ensure we have status
-          const status = get().status
-          if (!status) {
-            await get().fetchStatus()
-          }
-          
-          const quota = await subscriptionAPI.checkQuota(feature)
-          
-          // Add percentage calculation
-          const enhancedQuota: QuotaCheck = {
-            ...quota,
-            percentage: quota.limit && quota.limit !== -1 && quota.used !== undefined 
-              ? Math.round((quota.used / quota.limit) * 100)
-              : 0
-          }
-          
-          set(state => ({
-            quotaCache: { ...state.quotaCache, [feature]: enhancedQuota },
-            lastFetched: {
-              ...state.lastFetched,
-              quota: { ...state.lastFetched.quota, [feature]: now }
-            }
-          }))
-          return enhancedQuota
-        } catch (error) {
-          console.error('Failed to check quota:', error)
-          // Return a permissive default if quota check fails
-          return { 
-            feature, 
-            allowed: true, 
-            limit: -1, 
-            used: 0, 
-            remaining: -1, 
-            percentage: 0 
-          }
+        // If a request is already in-flight for this feature, return it
+        const existingRequest = inFlightRequests.quotas.get(feature)
+        if (existingRequest) {
+          return existingRequest
         }
+
+        // Create new request
+        const quotaPromise = (async () => {
+          try {
+            // First ensure we have status
+            const status = get().status
+            if (!status) {
+              await get().fetchStatus()
+            }
+            
+            const quota = await subscriptionAPI.checkQuota(feature)
+            
+            // Add percentage calculation
+            const enhancedQuota: QuotaCheck = {
+              ...quota,
+              percentage: quota.limit && quota.limit !== -1 && quota.used !== undefined 
+                ? Math.round((quota.used / quota.limit) * 100)
+                : 0
+            }
+            
+            set(state => ({
+              quotaCache: { ...state.quotaCache, [feature]: enhancedQuota },
+              lastFetched: {
+                ...state.lastFetched,
+                quota: { ...state.lastFetched.quota, [feature]: now }
+              }
+            }))
+            
+            return enhancedQuota
+          } catch (error) {
+            console.error('Failed to check quota:', error)
+            // Return a permissive default if quota check fails
+            return { 
+              feature, 
+              allowed: true, 
+              limit: -1, 
+              used: 0, 
+              remaining: -1, 
+              percentage: 0 
+            }
+          } finally {
+            // Clear the promise when done
+            inFlightRequests.quotas.delete(feature)
+          }
+        })()
+
+        // Store the promise to prevent duplicate requests
+        inFlightRequests.quotas.set(feature, quotaPromise)
+        return quotaPromise
       },
 
       // Report usage

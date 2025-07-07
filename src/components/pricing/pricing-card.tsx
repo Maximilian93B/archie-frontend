@@ -6,8 +6,7 @@ import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { useSubscriptionStore } from '@/store/subscription-store'
-import { toast } from 'react-hot-toast'
+import { useSubscription } from '@/hooks/use-subscription'
 
 interface PricingCardProps {
   plan: {
@@ -33,7 +32,7 @@ interface PricingCardProps {
 export function PricingCard({ plan, highlighted, currentPlan }: PricingCardProps) {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
-  const { createCheckoutSession } = useSubscriptionStore()
+  const { startCheckout } = useSubscription()
   const [isLoading, setIsLoading] = useState(false)
 
   const formatLimit = (value: number, type: string) => {
@@ -50,12 +49,9 @@ export function PricingCard({ plan, highlighted, currentPlan }: PricingCardProps
 
     setIsLoading(true)
     try {
-      const sessionUrl = await createCheckoutSession(plan.lookup_key)
-      if (sessionUrl) {
-        window.location.href = sessionUrl
-      }
-    } catch (error) {
-      toast.error('Failed to start checkout. Please try again.')
+      await startCheckout(plan.lookup_key)
+    } catch {
+      // Error is already handled by startCheckout with toast
       setIsLoading(false)
     }
   }
